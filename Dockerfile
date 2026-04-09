@@ -21,6 +21,7 @@ RUN cd server && npm run build
 FROM node:20-alpine
 
 WORKDIR /app
+RUN mkdir -p server/data
 
 # Copy server production deps
 COPY server/package*.json ./server/
