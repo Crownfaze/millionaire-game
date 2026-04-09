@@ -1,0 +1,83 @@
+/* ========================================
+   MILLIONAIRE — Rules Page Styles
+   ======================================== */
+
+.rules-page {
+  position: relative;
+  z-index: var(--z-content);
+  width: 100%;
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.rules-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 70px;
+  margin-bottom: var(--space-8);
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+}
+
+.rule-card {
+  padding: var(--space-8) var(--space-6);
+  background: rgba(10, 10, 30, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  transition: all var(--duration-normal) var(--ease-out);
+  animation: fade-in-up 0.6s var(--ease-out) both;
+}
+
+.rule-card:hover {
+  border-color: rgba(0, 212, 255, 0.3);
+  background: rgba(10, 10, 30, 0.85);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(0, 212, 255, 0.1);
+}
+
+.rule-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 212, 255, 0.05));
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-5);
+  color: var(--color-cyan-300);
+}
+
+.rule-title {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--color-white);
+  margin-bottom: var(--space-3);
+}
+
+.rule-desc {
+  font-size: var(--text-sm);
+  color: var(--color-gray-300);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .rules-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .rules-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,41 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install client dependencies and build
+COPY client/package*.json ./client/
+RUN cd client && npm ci
+
+COPY client/ ./client/
+RUN cd client && npm run build
+
+# Install server dependencies and build
+COPY server/package*.json ./server/
+RUN cd server && npm ci
+
+COPY server/ ./server/
+RUN cd server && npm run build
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy server production deps
+COPY server/package*.json ./server/
+RUN cd server && npm ci --omit=dev
+
+# Copy server build
+COPY --from=builder /app/server/dist ./server/dist
+
+# Copy client build
+COPY --from=builder /app/client/dist ./client/dist
+
+# Set production environment
+ENV NODE_ENV=production
+ENV PORT=4000
+
+EXPOSE 4000
+
+CMD ["node", "server/dist/index.js"]

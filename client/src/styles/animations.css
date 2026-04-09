@@ -1,0 +1,123 @@
+/* ========================================
+   MILLIONAIRE — Animations
+   ======================================== */
+
+/* ── Pulse Glow ── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes pulse-scale {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+/* ── Cyan Border Glow ── */
+@keyframes cyan-border-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3), 0 0 40px rgba(0, 212, 255, 0.1), inset 0 0 20px rgba(0, 212, 255, 0.08);
+    border-color: rgba(0, 212, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.5), 0 0 60px rgba(0, 212, 255, 0.2), inset 0 0 30px rgba(0, 212, 255, 0.12);
+    border-color: rgba(0, 212, 255, 0.8);
+  }
+}
+
+/* ── Gold Pulse ── */
+@keyframes gold-pulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.3), 0 0 30px rgba(255, 215, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.5), 0 0 50px rgba(255, 215, 0, 0.2);
+  }
+}
+
+/* ── Spotlight Sweep ── */
+@keyframes spotlight-1 {
+  0%, 100% { opacity: 0.15; transform: translate(0, 0) scale(1); }
+  33% { opacity: 0.25; transform: translate(30px, -20px) scale(1.1); }
+  66% { opacity: 0.1; transform: translate(-20px, 10px) scale(0.95); }
+}
+
+@keyframes spotlight-2 {
+  0%, 100% { opacity: 0.1; transform: translate(0, 0) scale(1); }
+  50% { opacity: 0.2; transform: translate(-40px, 20px) scale(1.15); }
+}
+
+@keyframes spotlight-3 {
+  0%, 100% { opacity: 0.12; transform: translate(0, 0); }
+  40% { opacity: 0.22; transform: translate(20px, -30px); }
+  80% { opacity: 0.08; transform: translate(-15px, 15px); }
+}
+
+/* ── Bokeh Float ── */
+@keyframes bokeh-float {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.3; }
+  25% { transform: translateY(-15px) scale(1.1); opacity: 0.5; }
+  50% { transform: translateY(-5px) scale(0.9); opacity: 0.25; }
+  75% { transform: translateY(-20px) scale(1.05); opacity: 0.4; }
+}
+
+/* ── Timer Ring ── */
+@keyframes timer-ring {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 283; }
+}
+
+/* ── Correct Answer ── */
+@keyframes answer-correct {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.05); }
+  60% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+
+/* ── Fade In Up ── */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Fade In ── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Slide In Right ── */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Shimmer ── */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ── Checkmark Draw ── */
+@keyframes checkmark-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* ── Progress Fill ── */
+@keyframes progress-fill {
+  from { height: 0%; }
+}
