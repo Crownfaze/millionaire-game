@@ -1,13 +1,14 @@
 import { io, Socket } from 'socket.io-client';
+import { API_BASE } from './api';
 
 // Single socket instance for the app
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    // In production, connect to same origin (no URL needed)
-    // In dev, Vite proxies /socket.io to localhost:4000
-    socket = io({
+    // In dev, Vite proxies /socket.io to localhost:4000 (empty string = same origin)
+    // In production (Vercel), VITE_BACKEND_URL points to Railway backend
+    socket = io(API_BASE, {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,

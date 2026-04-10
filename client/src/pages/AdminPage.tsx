@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import StudioBackground from '../components/game/StudioBackground';
 import { getSocket } from '../lib/socket';
+import { API_BASE } from '../lib/api';
 import {
   Plus,
   Play,
@@ -142,7 +143,7 @@ export default function AdminPage() {
   /* ─── Fetch data ─── */
   const fetchQuestions = useCallback(async () => {
     try {
-      let url = '/api/questions';
+      let url = `${API_BASE}/api/questions`;
       const params = new URLSearchParams();
       if (filterCategory) params.set('category', filterCategory);
       if (filterDifficulty) params.set('difficulty', filterDifficulty);
@@ -158,7 +159,7 @@ export default function AdminPage() {
 
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch('/api/questions/categories/all');
+      const res = await fetch(`${API_BASE}/api/questions/categories/all`);
       const data = await res.json();
       setCategories(data);
     } catch (error) {
@@ -168,7 +169,7 @@ export default function AdminPage() {
 
   const fetchRooms = useCallback(async () => {
     try {
-      const res = await fetch('/api/rooms');
+      const res = await fetch(`${API_BASE}/api/rooms`);
       const data = await res.json();
       setRooms(data);
     } catch (error) {
@@ -240,7 +241,7 @@ export default function AdminPage() {
     }
 
     try {
-      const res = await fetch('/api/rooms', {
+      const res = await fetch(`${API_BASE}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: roomName, timerDuration, difficulty }),
@@ -256,7 +257,7 @@ export default function AdminPage() {
       socket.emit('admin:join', { roomCode: data.code, hostId: data.hostId });
 
       // Load questions for the game
-      const qRes = await fetch('/api/questions');
+      const qRes = await fetch(`${API_BASE}/api/questions`);
       const allQ = await qRes.json();
       // Shuffle and pick 15
       const shuffled = [...allQ].sort(() => Math.random() - 0.5).slice(0, 15);
@@ -291,14 +292,14 @@ export default function AdminPage() {
       const body = { text, answerA, answerB, answerC, answerD, correctIndex, categoryId, difficulty: diff };
 
       if (editingId) {
-        await fetch(`/api/questions/${editingId}`, {
+        await fetch(`${API_BASE}/api/questions/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         showNotify('✅ Вопрос обновлён', 'success');
       } else {
-        await fetch('/api/questions', {
+        await fetch(`${API_BASE}/api/questions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -318,7 +319,7 @@ export default function AdminPage() {
 
   const deleteQuestion = useCallback(async (id: number) => {
     try {
-      await fetch(`/api/questions/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/questions/${id}`, { method: 'DELETE' });
       showNotify('🗑️ Вопрос удалён', 'info');
       fetchQuestions();
     } catch (error) {

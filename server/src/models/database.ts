@@ -1,11 +1,17 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function initDatabase(): Database.Database {
-  const dbPath = path.join(__dirname, '..', '..', 'data', 'millionaire.db');
+  const dataDir = path.join(__dirname, '..', '..', 'data');
+  // Ensure data directory exists (important for Docker containers)
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const dbPath = path.join(dataDir, 'millionaire.db');
   const db = new Database(dbPath);
 
   // Enable WAL mode for better performance

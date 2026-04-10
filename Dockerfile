@@ -1,6 +1,9 @@
 # Build stage
 FROM node:20-alpine AS builder
 
+# Install build tools for native modules (better-sqlite3)
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # Install client dependencies and build
@@ -20,10 +23,13 @@ RUN cd server && npm run build
 # Production stage
 FROM node:20-alpine
 
+# Install build tools for native modules (better-sqlite3 needs rebuild)
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 RUN mkdir -p server/data
 
-# Copy server production deps
+# Copy server production deps and rebuild native modules
 COPY server/package*.json ./server/
 RUN cd server && npm ci --omit=dev
 
@@ -32,6 +38,9 @@ COPY --from=builder /app/server/dist ./server/dist
 
 # Copy client build
 COPY --from=builder /app/client/dist ./client/dist
+
+# Create data directory for SQLite database
+RUN mkdir -p /app/server/data
 
 # Set production environment
 ENV NODE_ENV=production
