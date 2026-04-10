@@ -46,6 +46,7 @@ export function initDatabase(): Database.Database {
       host_id TEXT NOT NULL,
       timer_duration INTEGER DEFAULT 30,
       difficulty TEXT DEFAULT 'mixed',
+      category_id INTEGER REFERENCES categories(id),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -67,6 +68,13 @@ export function initDatabase(): Database.Database {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migrate: add category_id to rooms if not exists (for existing DBs)
+  try {
+    db.exec('ALTER TABLE rooms ADD COLUMN category_id INTEGER REFERENCES categories(id)');
+  } catch {
+    // Column already exists — ignore
+  }
 
   // Seed default categories
   const categoryCount = db.prepare('SELECT COUNT(*) as count FROM categories').get() as { count: number };

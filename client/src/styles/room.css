@@ -1,142 +1,98 @@
 /* ========================================
-   MILLIONAIRE — Room/Participant Page
-   Full game view for players
+   MILLIONAIRE — Room Page Styles
    ======================================== */
 
-.room-page {
+/* ── Center screen (join / waiting / game over) ── */
+.room-center-screen {
   position: relative;
   z-index: var(--z-content);
-  width: 100%;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-}
-
-/* ── Waiting / Join Screen ── */
-.room-waiting {
-  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-5);
-  animation: fade-in-up 0.8s var(--ease-out);
-  max-width: 500px;
-  width: 100%;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-8);
+  gap: var(--space-8);
 }
 
-.logo-badge--large {
-  width: 80px;
-  height: 80px;
+.room-logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
 }
 
-.logo-badge--large span {
-  font-size: var(--text-3xl);
+.logo-badge--xl {
+  width: 90px !important;
+  height: 90px !important;
 }
 
-.room-title {
+.logo-badge--xl span {
+  font-size: 3rem !important;
+}
+
+.room-brand {
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   font-weight: 700;
+  letter-spacing: 4px;
   background: var(--gradient-gold-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  filter: drop-shadow(0 0 16px rgba(255, 215, 0, 0.4));
 }
 
-.room-subtitle {
-  font-size: var(--text-lg);
-  color: var(--color-gray-300);
-}
-
-.room-name-form {
-  display: flex;
-  gap: var(--space-3);
+.room-join-card {
+  background: rgba(8, 8, 24, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xl);
+  padding: var(--space-10) var(--space-12);
+  max-width: 520px;
   width: 100%;
-}
-
-.room-name-input {
-  flex: 1;
-  padding: var(--space-3) var(--space-4);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-sm);
-  color: var(--color-white);
-  font-family: var(--font-body);
-  font-size: var(--text-base);
-  outline: none;
-}
-
-.room-name-input:focus {
-  border-color: var(--color-cyan-500);
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.15);
-}
-
-.btn-join-room {
-  padding: var(--space-3) var(--space-6);
-  background: var(--gradient-gold);
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  color: var(--color-bg-deep);
-  box-shadow: var(--glow-gold);
-  transition: all var(--duration-normal) var(--ease-out);
-  white-space: nowrap;
-}
-
-.btn-join-room:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--glow-gold-intense);
-}
-
-.btn-join-room:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.room-status-badge {
+  text-align: center;
+  box-shadow: var(--shadow-elevated);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: rgba(0, 255, 136, 0.08);
-  border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: var(--radius-lg);
-  font-size: var(--text-sm);
-  color: var(--color-success);
+  gap: var(--space-5);
 }
 
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-success);
-  animation: pulse-glow 2s ease-in-out infinite;
+.room-code-display {
+  font-size: var(--text-xl);
+  color: var(--color-gray-300);
+  letter-spacing: 2px;
+}
+
+.room-code-display strong {
+  color: var(--color-cyan-500);
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
 }
 
 .room-error {
-  padding: var(--space-3) var(--space-5);
-  background: rgba(255, 68, 68, 0.1);
-  border: 1px solid rgba(255, 68, 68, 0.3);
-  border-radius: var(--radius-md);
   color: var(--color-error);
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.25);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-5);
   font-size: var(--text-sm);
-  font-weight: 600;
+  width: 100%;
 }
 
 .room-connecting {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: var(--space-3);
-  color: var(--color-gray-300);
+  color: var(--color-gray-500);
+  font-size: var(--text-sm);
 }
 
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+.room-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 212, 255, 0.2);
   border-top-color: var(--color-cyan-500);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -146,318 +102,272 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── Game Screen ── */
-.room-game {
-  width: 100%;
-  max-width: 800px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  animation: fade-in-up 0.5s var(--ease-out);
-}
-
-.room-game-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  background: rgba(8, 8, 24, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-lg);
-}
-
-.room-game-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.room-game-player {
-  font-weight: 800;
+.room-join-hint {
+  color: var(--color-gray-300);
   font-size: var(--text-base);
+}
+
+.room-player-name-hi {
+  color: var(--color-gold-300);
+}
+
+.room-room-name {
+  font-size: var(--text-2xl);
+  font-weight: 700;
   color: var(--color-white);
 }
 
-.room-game-level {
+.room-name-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.room-name-input {
+  text-align: center;
+  font-size: var(--text-lg);
+  letter-spacing: 1px;
+}
+
+.room-join-btn {
+  width: 100%;
+  font-size: var(--text-base) !important;
+  padding: var(--space-4) var(--space-6) !important;
+}
+
+.room-waiting-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: var(--radius-full);
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-cyan-300);
+  font-weight: 600;
+}
+
+.room-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-cyan-500);
+  box-shadow: 0 0 8px var(--color-cyan-500);
+  animation: pulse-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* ── Game header additions for room ── */
+.room-lifelines-header {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.room-ll-badge {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all var(--duration-normal);
+}
+
+.room-ll-badge--5050 {
+  background: rgba(255, 215, 0, 0.15);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  color: var(--color-gold-300);
+}
+
+.room-ll-badge--phone {
+  background: rgba(150, 150, 150, 0.1);
+  border: 1px solid rgba(150, 150, 150, 0.3);
+  color: var(--color-gray-300);
+}
+
+.room-ll-badge--audience {
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  color: var(--color-cyan-500);
+}
+
+.room-ll-badge--used {
+  opacity: 0.25;
+  filter: grayscale(1);
+}
+
+.room-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.room-player-tag {
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-gold-300);
+  padding: var(--space-2) var(--space-4);
+  background: rgba(255, 215, 0, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: var(--radius-full);
 }
 
-/* Timer ring */
-.room-timer {
+/* ── Timer in header ── */
+.room-timer-wrap {
   position: relative;
-  width: 60px;
-  height: 60px;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.room-timer-ring {
+.room-timer-svg {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .room-timer-text {
+  position: relative;
+  z-index: 1;
   font-size: var(--text-base);
-  font-weight: 900;
+  font-weight: 800;
   color: var(--color-white);
   font-variant-numeric: tabular-nums;
-  z-index: 1;
 }
 
 .room-timer--danger .room-timer-text {
-  color: var(--color-error);
-  animation: pulse-glow 0.5s ease-in-out infinite;
+  color: #ff4444;
+  animation: danger-pulse 0.5s ease-in-out infinite;
 }
 
 .room-timer--paused .room-timer-text {
-  color: var(--color-warning);
-}
-
-/* Lifeline indicators */
-.room-lifelines {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-3);
-}
-
-.room-lifeline {
-  padding: var(--space-2) var(--space-4);
-  background: rgba(255, 215, 0, 0.08);
-  border: 1px solid rgba(255, 215, 0, 0.25);
-  border-radius: var(--radius-md);
-  font-weight: 800;
-  font-size: var(--text-sm);
   color: var(--color-gold-300);
-  transition: all 0.3s;
 }
 
-.room-lifeline--used {
-  opacity: 0.3;
-  text-decoration: line-through;
-  border-color: rgba(255, 255, 255, 0.05);
-  color: var(--color-gray-500);
+.room-timer-pause-icon {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 10px;
 }
 
-/* Lifeline results */
-.room-lifeline-result {
-  padding: var(--space-3) var(--space-4);
-  background: rgba(0, 212, 255, 0.05);
-  border: 1px solid rgba(0, 212, 255, 0.15);
-  border-radius: var(--radius-md);
+@keyframes danger-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ── Lifeline popups ── */
+.room-lifeline-popup {
+  width: 100%;
+  max-width: 700px;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-lg);
   font-size: var(--text-sm);
-  color: var(--color-white);
-  animation: fade-in-up 0.4s var(--ease-out);
+  font-weight: 600;
+}
+
+.room-lifeline-popup--phone {
+  background: rgba(150, 150, 150, 0.1);
+  border: 1px solid rgba(150, 150, 150, 0.25);
+  color: var(--color-gray-300);
+}
+
+.room-lifeline-popup--audience {
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  color: var(--color-cyan-300);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .room-audience-bars {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin-top: var(--space-2);
 }
 
 .room-audience-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  font-size: var(--text-xs);
 }
 
 .room-audience-label {
-  width: 20px;
-  font-weight: 800;
-  color: var(--color-gray-300);
+  width: 16px;
+  font-weight: 700;
+  color: var(--color-white);
 }
 
 .room-audience-track {
   flex: 1;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .room-audience-fill {
   height: 100%;
-  background: linear-gradient(90deg, rgba(0, 212, 255, 0.3), rgba(0, 212, 255, 0.6));
-  border-radius: 8px;
-  transition: width 1s var(--ease-out);
-  animation: bar-fill-in 1s var(--ease-out);
+  background: rgba(0, 212, 255, 0.5);
+  border-radius: 4px;
+  transition: width 0.8s var(--ease-out);
 }
 
-@keyframes bar-fill-in {
-  from { width: 0 !important; }
+.room-audience-fill--correct {
+  background: rgba(0, 255, 136, 0.6);
 }
 
 .room-audience-pct {
   width: 36px;
   text-align: right;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  color: var(--color-gray-300);
+  color: var(--color-white);
+  font-weight: 600;
 }
 
-/* Question card */
-.room-question {
-  padding: var(--space-6) var(--space-5);
-  background: rgba(8, 8, 24, 0.85);
-  border: 1px solid rgba(0, 212, 255, 0.2);
+/* ── Status messages ── */
+.room-status-msg {
+  max-width: 700px;
+  width: 100%;
+  text-align: center;
+  padding: var(--space-3) var(--space-6);
   border-radius: var(--radius-lg);
-  text-align: center;
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.05);
-  animation: fade-in-up 0.5s var(--ease-out);
-}
-
-.room-question-text {
-  font-size: var(--text-xl);
-  font-weight: 800;
-  color: var(--color-white);
-  line-height: 1.5;
-}
-
-/* Answer buttons */
-.room-answers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-}
-
-.room-answer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  background: rgba(20, 20, 50, 0.9);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  transition: all 0.25s var(--ease-out);
-  text-align: left;
-  cursor: pointer;
-  clip-path: polygon(4% 0%, 96% 0%, 100% 50%, 96% 100%, 4% 100%, 0% 50%);
-}
-
-.room-answer:hover:not(:disabled) {
-  border-color: rgba(0, 212, 255, 0.4);
-  background: rgba(0, 212, 255, 0.08);
-  transform: scale(1.01);
-}
-
-.room-answer:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.room-answer--hidden {
-  opacity: 0.15;
-  pointer-events: none;
-}
-
-.room-answer--selected {
-  background: rgba(255, 215, 0, 0.15);
-  border-color: rgba(255, 215, 0, 0.6);
-  box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
-}
-
-.room-answer--admin-selected {
-  background: rgba(255, 215, 0, 0.1);
-  border-color: rgba(255, 215, 0, 0.3);
-  animation: pulse-border 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-border {
-  0%, 100% { border-color: rgba(255, 215, 0, 0.3); }
-  50% { border-color: rgba(255, 215, 0, 0.7); }
-}
-
-.room-answer--correct {
-  background: rgba(0, 255, 136, 0.15);
-  border-color: rgba(0, 255, 136, 0.6);
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.25);
-  animation: answer-glow-green 0.6s ease-out;
-}
-
-@keyframes answer-glow-green {
-  0% { box-shadow: 0 0 0 rgba(0, 255, 136, 0); }
-  50% { box-shadow: 0 0 40px rgba(0, 255, 136, 0.4); }
-  100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.25); }
-}
-
-.room-answer--wrong {
-  background: rgba(255, 68, 68, 0.15);
-  border-color: rgba(255, 68, 68, 0.6);
-  box-shadow: 0 0 20px rgba(255, 68, 68, 0.2);
-  animation: answer-shake 0.4s ease;
-}
-
-@keyframes answer-shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
-}
-
-.room-answer--dimmed {
-  opacity: 0.4;
-}
-
-.room-answer-letter {
-  font-weight: 900;
   font-size: var(--text-base);
-  color: var(--color-gold-300);
-  min-width: 24px;
-}
-
-.room-answer-text {
   font-weight: 700;
-  font-size: var(--text-base);
-  color: var(--color-white);
 }
 
-/* Status badges */
-.room-submitted-badge {
-  text-align: center;
-  padding: var(--space-3);
+.room-status-msg--hint {
+  color: var(--color-gray-500);
+  background: transparent;
+}
+
+.room-status-msg--submitted {
   background: rgba(0, 212, 255, 0.08);
   border: 1px solid rgba(0, 212, 255, 0.2);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 700;
   color: var(--color-cyan-300);
-  animation: fade-in-up 0.3s var(--ease-out);
 }
 
-.room-result-badge {
-  text-align: center;
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--text-lg);
-  font-weight: 800;
-  animation: fade-in-up 0.4s var(--ease-out);
-}
-
-.room-result-badge--correct {
+.room-status-msg--correct {
   background: rgba(0, 255, 136, 0.1);
   border: 1px solid rgba(0, 255, 136, 0.3);
   color: var(--color-success);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
 }
 
-.room-result-badge--wrong {
+.room-status-msg--wrong {
   background: rgba(255, 68, 68, 0.1);
   border: 1px solid rgba(255, 68, 68, 0.3);
   color: var(--color-error);
-}
-
-/* Responsive */
-@media (max-width: 600px) {
-  .room-answers {
-    grid-template-columns: 1fr;
-  }
-
-  .room-answer {
-    clip-path: none;
-    border-radius: var(--radius-md);
-  }
-
-  .room-question-text {
-    font-size: var(--text-lg);
-  }
 }

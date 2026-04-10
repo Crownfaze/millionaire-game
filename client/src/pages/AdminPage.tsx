@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import StudioBackground from '../components/game/StudioBackground';
 import { getSocket } from '../lib/socket';
-import { API_BASE } from '../lib/api';
 import {
   Plus,
   Play,
@@ -14,18 +13,21 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertCircle,
   Copy,
   X,
   Save,
   Phone,
   HelpCircle,
   Scissors,
-  ChevronDown,
-  ChevronUp,
   Zap,
   Eye,
   EyeOff,
+  ChevronUp,
+  ChevronDown,
+  Tag,
+  GripVertical,
+  Settings,
+  StopCircle,
 } from 'lucide-react';
 import '../styles/admin.css';
 
@@ -55,6 +57,7 @@ interface RoomData {
   status: string;
   timerDuration: number;
   difficulty: string;
+  category_id?: number | null;
 }
 
 interface QuestionForm {
@@ -79,7 +82,7 @@ const emptyForm: QuestionForm = {
   difficulty: 'medium',
 };
 
-const PRIZE_LEVELS = [
+const DEFAULT_PRIZE_LEVELS = [
   '100 ₽', '200 ₽', '300 ₽', '500 ₽', '1 000 ₽',
   '2 000 ₽', '5 000 ₽', '10 000 ₽', '50 000 ₽', '100 000 ₽',
   '250 000 ₽', '400 000 ₽', '500 000 ₽', '750 000 ₽', '1 000 000 ₽',
@@ -87,13 +90,13 @@ const PRIZE_LEVELS = [
 
 /* ─── Main Component ─── */
 export default function AdminPage() {
-  // Tabs
-  const [activeTab, setActiveTab] = useState<'rooms' | 'control' | 'questions'>('control');
+  const [activeTab, setActiveTab] = useState<'rooms' | 'control' | 'questions' | 'settings'>('control');
 
   // Room state
   const [roomName, setRoomName] = useState('');
   const [timerDuration, setTimerDuration] = useState(30);
   const [difficulty, setDifficulty] = useState('mixed');
+  const [roomCategoryFilter, setRoomCategoryFilter] = useState<number | null>(null);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [activeRoom, setActiveRoom] = useState<RoomData | null>(null);
   const [copyFeedback, setCopyFeedback] = useState('');
@@ -107,6 +110,9 @@ export default function AdminPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState('');
 
+  // New category
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   // Game control state
   const [timerValue, setTimerValue] = useState(30);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -117,16 +123,17 @@ export default function AdminPage() {
   const [currentLevel, setCurrentLevel] = useState(0);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [gameQuestions, setGameQuestions] = useState<QuestionDB[]>([]);
-  const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [showCorrectAnswer, setShowCorrectAnswer] = useState(true); // Always show
+
+  // Prize ladder customization
+  const [prizeLevels, setPrizeLevels] = useState<string[]>(DEFAULT_PRIZE_LEVELS);
+  const [editingPrize, setEditingPrize] = useState(false);
+  const [prizeDraft, setPrizeDraft] = useState<string[]>(DEFAULT_PRIZE_LEVELS);
 
   // Lifelines
   const [lifeline5050, setLifeline5050] = useState(true);
   const [lifelinePhone, setLifelinePhone] = useState(true);
   const [lifelineAudience, setLifelineAudience] = useState(true);
-  const [lifeline5050Anim, setLifeline5050Anim] = useState(false);
-  const [lifelinePhoneAnim, setLifelinePhoneAnim] = useState(false);
-  const [lifelineAudienceAnim, setLifelineAudienceAnim] = useState(false);
   const [hiddenAnswers, setHiddenAnswers] = useState<number[]>([]);
   const [phoneResult, setPhoneResult] = useState<string | null>(null);
   const [audienceResult, setAudienceResult] = useState<number[] | null>(null);
@@ -143,12 +150,11 @@ export default function AdminPage() {
   /* ─── Fetch data ─── */
   const fetchQuestions = useCallback(async () => {
     try {
-      let url = `${API_BASE}/api/questions`;
+      let url = '/api/questions';
       const params = new URLSearchParams();
       if (filterCategory) params.set('category', filterCategory);
       if (filterDifficulty) params.set('difficulty', filterDifficulty);
       if (params.toString()) url += '?' + params.toString();
-
       const res = await fetch(url);
       const data = await res.json();
       setQuestions(data);
@@ -159,7 +165,7 @@ export default function AdminPage() {
 
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/questions/categories/all`);
+      const res = await fetch('/api/questions/categories/all');
       const data = await res.json();
       setCategories(data);
     } catch (error) {
@@ -169,7 +175,7 @@ export default function AdminPage() {
 
   const fetchRooms = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/rooms`);
+      const res = await fetch('/api/rooms');
       const data = await res.json();
       setRooms(data);
     } catch (error) {
@@ -183,8 +189,31 @@ export default function AdminPage() {
     fetchRooms();
   }, [fetchQuestions, fetchCategories, fetchRooms]);
 
-  /* ─── Timer logic ─── */
-  const startTimer = useCallback(() => {
+  /* ─── Socket listeners (timer sync) ─── */
+  useEffect(() => {
+    const socket = getSocket();
+
+    socket.on('timer:sync', (data: { remaining: number; total: number }) => {
+      setTimerValue(data.remaining);
+    });
+
+    socket.on('timer:expired', () => {
+      setTimerValue(0);
+      setTimerRunning(false);
+      setTimerPaused(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+      showNotify('Время вышло!', 'error');
+    });
+
+    return () => {
+      socket.off('timer:sync');
+      socket.off('timer:expired');
+    };
+  }, [showNotify]);
+
+  /* ─── Local visual timer (just for admin display when no active room) ─── */
+  const startLocalTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(true);
     setTimerPaused(false);
@@ -193,8 +222,9 @@ export default function AdminPage() {
       setTimerValue((prev) => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = null;
           setTimerRunning(false);
-          showNotify('⏰ Время вышло!', 'error');
+          showNotify('Время вышло!', 'error');
           return 0;
         }
         return prev - 1;
@@ -202,31 +232,63 @@ export default function AdminPage() {
     }, 1000);
   }, [showNotify]);
 
+  /* ─── Timer controls (emit socket events to sync with players) ─── */
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerRunning(true);
+    setTimerPaused(false);
+
+    if (activeRoom) {
+      const socket = getSocket();
+      socket.emit('timer:resume', { roomCode: activeRoom.code });
+    } else {
+      startLocalTimer();
+    }
+  }, [activeRoom, startLocalTimer]);
+
   const pauseTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     setTimerPaused(true);
     setTimerRunning(false);
-    showNotify('⏸️ Таймер на паузе', 'info');
-  }, [showNotify]);
+
+    if (activeRoom) {
+      const socket = getSocket();
+      socket.emit('timer:pause', { roomCode: activeRoom.code });
+    }
+    showNotify('Таймер на паузе', 'info');
+  }, [activeRoom, showNotify]);
 
   const resumeTimer = useCallback(() => {
-    if (timerPaused) {
-      startTimer();
-      showNotify('▶️ Таймер возобновлён', 'info');
+    if (!timerPaused) return;
+    setTimerPaused(false);
+    setTimerRunning(true);
+
+    if (activeRoom) {
+      const socket = getSocket();
+      socket.emit('timer:resume', { roomCode: activeRoom.code });
+    } else {
+      startLocalTimer();
     }
-  }, [timerPaused, startTimer, showNotify]);
+    showNotify('Таймер возобновлён', 'info');
+  }, [timerPaused, activeRoom, startLocalTimer, showNotify]);
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    setTimerValue(activeRoom?.timerDuration || timerDuration);
+    const dur = activeRoom?.timerDuration || timerDuration;
+    setTimerValue(dur);
     setTimerRunning(false);
     setTimerPaused(false);
-    showNotify('🔄 Таймер сброшен', 'info');
+
+    if (activeRoom) {
+      const socket = getSocket();
+      socket.emit('timer:reset', { roomCode: activeRoom.code, duration: dur });
+    }
+    showNotify('Таймер сброшен', 'info');
   }, [activeRoom, timerDuration, showNotify]);
 
-  // Cleanup timer on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -239,12 +301,11 @@ export default function AdminPage() {
       showNotify('Введите название комнаты', 'error');
       return;
     }
-
     try {
-      const res = await fetch(`${API_BASE}/api/rooms`, {
+      const res = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: roomName, timerDuration, difficulty }),
+        body: JSON.stringify({ name: roomName, timerDuration, difficulty, categoryId: roomCategoryFilter }),
       });
       const data = await res.json();
       setActiveRoom(data);
@@ -252,33 +313,80 @@ export default function AdminPage() {
       setRoomName('');
       fetchRooms();
 
-      // Join room via socket as admin
       const socket = getSocket();
       socket.emit('admin:join', { roomCode: data.code, hostId: data.hostId });
 
-      // Load questions for the game
-      const qRes = await fetch(`${API_BASE}/api/questions`);
+      // Load questions filtered by selected category
+      let qUrl = '/api/questions';
+      if (roomCategoryFilter) {
+        const cat = categories.find(c => c.id === roomCategoryFilter);
+        if (cat) qUrl += `?category=${encodeURIComponent(cat.name)}`;
+      }
+      const qRes = await fetch(qUrl);
       const allQ = await qRes.json();
-      // Shuffle and pick 15
       const shuffled = [...allQ].sort(() => Math.random() - 0.5).slice(0, 15);
       setGameQuestions(shuffled);
       setCurrentQuestionIdx(0);
       setCurrentLevel(0);
+      setShowCorrectAnswer(true);
 
-      showNotify(`✅ Комната "${data.name}" создана! Код: ${data.code}`, 'success');
+      showNotify(`Комната "${data.name}" создана! Код: ${data.code}`, 'success');
     } catch (error) {
       console.error('Failed to create room:', error);
       showNotify('Ошибка при создании комнаты', 'error');
     }
-  }, [roomName, timerDuration, difficulty, showNotify, fetchRooms]);
+  }, [roomName, timerDuration, difficulty, roomCategoryFilter, categories, showNotify, fetchRooms]);
+
+  const closeRoom = useCallback(async (code: string) => {
+    try {
+      await fetch(`/api/rooms/${code}/close`, { method: 'PATCH' });
+      if (activeRoom?.code === code) setActiveRoom(null);
+      fetchRooms();
+      showNotify('Комната закрыта', 'info');
+    } catch {
+      showNotify('Ошибка при закрытии комнаты', 'error');
+    }
+  }, [activeRoom, fetchRooms, showNotify]);
+
+  const deleteRoom = useCallback(async (code: string) => {
+    try {
+      await fetch(`/api/rooms/${code}`, { method: 'DELETE' });
+      if (activeRoom?.code === code) setActiveRoom(null);
+      fetchRooms();
+      showNotify('Комната удалена', 'info');
+    } catch {
+      showNotify('Ошибка при удалении комнаты', 'error');
+    }
+  }, [activeRoom, fetchRooms, showNotify]);
 
   const copyRoomLink = useCallback((code: string) => {
     const link = `${window.location.origin}/room/${code}`;
     navigator.clipboard.writeText(link);
     setCopyFeedback(code);
     setTimeout(() => setCopyFeedback(''), 1500);
-    showNotify('📋 Ссылка скопирована!', 'success');
+    showNotify('Ссылка скопирована!', 'success');
   }, [showNotify]);
+
+  /* ─── Category management ─── */
+  const createCategory = useCallback(async () => {
+    if (!newCategoryName.trim()) {
+      showNotify('Введите название категории', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/api/questions/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCategoryName.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      setNewCategoryName('');
+      fetchCategories();
+      showNotify(`Категория "${newCategoryName.trim()}" добавлена`, 'success');
+    } catch {
+      showNotify('Ошибка при создании категории', 'error');
+    }
+  }, [newCategoryName, fetchCategories, showNotify]);
 
   /* ─── Question CRUD ─── */
   const saveQuestion = useCallback(async () => {
@@ -287,26 +395,23 @@ export default function AdminPage() {
       showNotify('Заполните все поля', 'error');
       return;
     }
-
     try {
       const body = { text, answerA, answerB, answerC, answerD, correctIndex, categoryId, difficulty: diff };
-
       if (editingId) {
-        await fetch(`${API_BASE}/api/questions/${editingId}`, {
+        await fetch(`/api/questions/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        showNotify('✅ Вопрос обновлён', 'success');
+        showNotify('Вопрос обновлён', 'success');
       } else {
-        await fetch(`${API_BASE}/api/questions`, {
+        await fetch('/api/questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        showNotify('✅ Вопрос добавлен', 'success');
+        showNotify('Вопрос добавлен', 'success');
       }
-
       setQuestionForm(emptyForm);
       setShowForm(false);
       setEditingId(null);
@@ -319,11 +424,10 @@ export default function AdminPage() {
 
   const deleteQuestion = useCallback(async (id: number) => {
     try {
-      await fetch(`${API_BASE}/api/questions/${id}`, { method: 'DELETE' });
-      showNotify('🗑️ Вопрос удалён', 'info');
+      await fetch(`/api/questions/${id}`, { method: 'DELETE' });
+      showNotify('Вопрос удалён', 'info');
       fetchQuestions();
-    } catch (error) {
-      console.error('Failed to delete question:', error);
+    } catch {
       showNotify('Ошибка при удалении', 'error');
     }
   }, [showNotify, fetchQuestions]);
@@ -343,11 +447,36 @@ export default function AdminPage() {
     setShowForm(true);
   }, []);
 
+  /* ─── Game queue management ─── */
+  const addToQueue = useCallback((q: QuestionDB) => {
+    setGameQuestions(prev => {
+      if (prev.find(gq => gq.id === q.id)) {
+        showNotify('Вопрос уже в очереди', 'error');
+        return prev;
+      }
+      showNotify(`Вопрос добавлен в очередь (${prev.length + 1})`, 'success');
+      return [...prev, q];
+    });
+  }, [showNotify]);
+
+  const removeFromQueue = useCallback((idx: number) => {
+    setGameQuestions(prev => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const moveQueueItem = useCallback((idx: number, dir: -1 | 1) => {
+    setGameQuestions(prev => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }, []);
+
   /* ─── Game Control ─── */
   const sendQuestionToPlayers = useCallback((q: QuestionDB, level: number) => {
     if (!activeRoom) return;
     const socket = getSocket();
-    const letters = ['A', 'B', 'C', 'D'];
     socket.emit('game:question', {
       roomCode: activeRoom.code,
       question: {
@@ -365,125 +494,96 @@ export default function AdminPage() {
     });
   }, [activeRoom, timerDuration]);
 
-  const nextQuestion = useCallback(() => {
-    if (currentQuestionIdx < gameQuestions.length - 1) {
-      const nextIdx = currentQuestionIdx + 1;
-      const nextLevel = Math.min(currentLevel + 1, 14);
-      setCurrentQuestionIdx(nextIdx);
-      setCurrentLevel(nextLevel);
-      setShowCorrectAnswer(false);
-      setSelectedAnswer(null);
-      setHiddenAnswers([]);
-      setPhoneResult(null);
-      setAudienceResult(null);
-      resetTimer();
-      startTimer();
-
-      // Broadcast to players
-      sendQuestionToPlayers(gameQuestions[nextIdx], nextLevel);
-
-      showNotify(`📝 Вопрос ${nextIdx + 1} / ${gameQuestions.length}`, 'info');
-    } else {
-      showNotify('🎉 Все вопросы пройдены!', 'success');
-    }
-  }, [currentQuestionIdx, currentLevel, gameQuestions, resetTimer, startTimer, showNotify, sendQuestionToPlayers]);
-
-  // Send first question to players
   const startGame = useCallback(() => {
     if (gameQuestions.length === 0 || !activeRoom) return;
     sendQuestionToPlayers(gameQuestions[0], 0);
     startTimer();
-    showNotify('🎮 Игра началась! Вопрос отправлен.', 'success');
+    showNotify('Игра началась! Вопрос отправлен.', 'success');
   }, [gameQuestions, activeRoom, sendQuestionToPlayers, startTimer, showNotify]);
 
+  const nextQuestion = useCallback(() => {
+    if (currentQuestionIdx < gameQuestions.length - 1) {
+      const nextIdx = currentQuestionIdx + 1;
+      const nextLevel = Math.min(currentLevel + 1, prizeLevels.length - 1);
+      setCurrentQuestionIdx(nextIdx);
+      setCurrentLevel(nextLevel);
+      setHiddenAnswers([]);
+      setPhoneResult(null);
+      setAudienceResult(null);
+      resetTimer();
+
+      sendQuestionToPlayers(gameQuestions[nextIdx], nextLevel);
+      showNotify(`Вопрос ${nextIdx + 1} / ${gameQuestions.length}`, 'info');
+
+      // Auto-start server timer after reset
+      setTimeout(() => {
+        if (activeRoom) {
+          const socket = getSocket();
+          socket.emit('timer:reset', { roomCode: activeRoom.code, duration: activeRoom.timerDuration || timerDuration });
+        }
+        startTimer();
+      }, 300);
+    } else {
+      showNotify('Все вопросы пройдены!', 'success');
+    }
+  }, [currentQuestionIdx, currentLevel, gameQuestions, prizeLevels, resetTimer, startTimer, showNotify, sendQuestionToPlayers, activeRoom, timerDuration]);
+
   const revealAnswer = useCallback(() => {
-    setShowCorrectAnswer(true);
-    pauseTimer();
     if (activeRoom && gameQuestions[currentQuestionIdx]) {
       const socket = getSocket();
       socket.emit('game:reveal', {
         roomCode: activeRoom.code,
         correctIndex: gameQuestions[currentQuestionIdx].correct_index,
       });
+      pauseTimer();
+      showNotify('Правильный ответ показан игрокам', 'info');
     }
-    showNotify('👁️ Правильный ответ показан', 'info');
   }, [pauseTimer, showNotify, activeRoom, gameQuestions, currentQuestionIdx]);
-
-  const selectAnswer = useCallback((idx: number) => {
-    setSelectedAnswer(idx);
-    if (activeRoom) {
-      const socket = getSocket();
-      socket.emit('game:selectAnswer', { roomCode: activeRoom.code, answerIndex: idx });
-    }
-  }, [activeRoom]);
 
   /* ─── Lifeline handlers ─── */
   const use5050 = useCallback(() => {
     if (!lifeline5050 || !gameQuestions[currentQuestionIdx]) return;
     setLifeline5050(false);
-    setLifeline5050Anim(true);
-    setTimeout(() => setLifeline5050Anim(false), 1500);
-
     const correct = gameQuestions[currentQuestionIdx].correct_index;
-    const wrong = [0, 1, 2, 3].filter((i) => i !== correct);
+    const wrong = [0, 1, 2, 3].filter(i => i !== correct);
     const toHide = wrong.sort(() => Math.random() - 0.5).slice(0, 2);
     setHiddenAnswers(toHide);
-
-    if (activeRoom) {
-      getSocket().emit('game:lifeline', { roomCode: activeRoom.code, type: '5050', hiddenAnswers: toHide });
-    }
-    showNotify('✂️ 50/50 — два неправильных ответа убраны!', 'success');
+    if (activeRoom) getSocket().emit('game:lifeline', { roomCode: activeRoom.code, type: '5050', hiddenAnswers: toHide });
+    showNotify('50/50 — два неправильных ответа убраны', 'success');
   }, [lifeline5050, gameQuestions, currentQuestionIdx, showNotify, activeRoom]);
 
   const usePhone = useCallback(() => {
     if (!lifelinePhone || !gameQuestions[currentQuestionIdx]) return;
     setLifelinePhone(false);
-    setLifelinePhoneAnim(true);
-    setTimeout(() => setLifelinePhoneAnim(false), 2000);
-
     const q = gameQuestions[currentQuestionIdx];
     const correct = q.correct_index;
     const answersArr = [q.answer_a, q.answer_b, q.answer_c, q.answer_d];
     const ltrs = ['A', 'B', 'C', 'D'];
     const isCorrect = Math.random() < 0.8;
-    const choice = isCorrect ? correct : [0, 1, 2, 3].filter((i) => i !== correct)[Math.floor(Math.random() * 2)];
+    const choice = isCorrect ? correct : [0, 1, 2, 3].filter(i => i !== correct)[Math.floor(Math.random() * 3)];
     const confidence = isCorrect ? Math.floor(70 + Math.random() * 25) : Math.floor(30 + Math.random() * 30);
-
     const result = `"Я думаю, что ответ ${ltrs[choice]}: ${answersArr[choice]}. Уверенность: ${confidence}%"`;
     setPhoneResult(result);
-
-    if (activeRoom) {
-      getSocket().emit('game:lifeline', { roomCode: activeRoom.code, type: 'phone', phoneResult: result });
-    }
-    showNotify('📞 Звонок другу — ответ получен!', 'success');
+    if (activeRoom) getSocket().emit('game:lifeline', { roomCode: activeRoom.code, type: 'phone', phoneResult: result });
+    showNotify('Звонок другу — ответ получен', 'success');
   }, [lifelinePhone, gameQuestions, currentQuestionIdx, showNotify, activeRoom]);
 
   const useAudience = useCallback(() => {
     if (!lifelineAudience || !gameQuestions[currentQuestionIdx]) return;
     setLifelineAudience(false);
-    setLifelineAudienceAnim(true);
-    setTimeout(() => setLifelineAudienceAnim(false), 2000);
-
     const correct = gameQuestions[currentQuestionIdx].correct_index;
-    const percentages = [0, 0, 0, 0];
-    percentages[correct] = 40 + Math.floor(Math.random() * 30);
-    let remaining = 100 - percentages[correct];
+    const pct = [0, 0, 0, 0];
+    pct[correct] = 40 + Math.floor(Math.random() * 30);
+    let rem = 100 - pct[correct];
     for (let i = 0; i < 4; i++) {
       if (i === correct) continue;
-      if (i === 3 || (i === 2 && [0, 1, 2].filter((x) => x !== correct).indexOf(i) === 1)) {
-        percentages[i] = remaining;
-      } else {
-        const share = Math.floor(Math.random() * remaining * 0.6);
-        percentages[i] = share;
-        remaining -= share;
-      }
+      const others = [0, 1, 2, 3].filter(x => x !== correct && pct[x] === 0);
+      if (others.indexOf(i) === others.length - 1) { pct[i] = rem; }
+      else { const share = Math.floor(Math.random() * rem * 0.6); pct[i] = share; rem -= share; }
     }
-    setAudienceResult(percentages);
-
-    if (activeRoom) {
-      getSocket().emit('game:lifeline', { roomCode: activeRoom.code, type: 'audience', audienceResult: percentages });
-    }
-    showNotify('👥 Помощь зала — результат получен!', 'success');
+    setAudienceResult(pct);
+    if (activeRoom) getSocket().emit('game:lifeline', { roomCode: activeRoom.code, type: 'audience', audienceResult: pct });
+    showNotify('Помощь зала — результат получен', 'success');
   }, [lifelineAudience, gameQuestions, currentQuestionIdx, showNotify, activeRoom]);
 
   const resetLifelines = useCallback(() => {
@@ -493,10 +593,8 @@ export default function AdminPage() {
     setHiddenAnswers([]);
     setPhoneResult(null);
     setAudienceResult(null);
-    if (activeRoom) {
-      getSocket().emit('game:resetLifelines', { roomCode: activeRoom.code });
-    }
-    showNotify('🔄 Подсказки восстановлены', 'info');
+    if (activeRoom) getSocket().emit('game:resetLifelines', { roomCode: activeRoom.code });
+    showNotify('Подсказки восстановлены', 'info');
   }, [showNotify, activeRoom]);
 
   /* ─── Format time ─── */
@@ -507,10 +605,9 @@ export default function AdminPage() {
   };
 
   const currentQ = gameQuestions[currentQuestionIdx] || null;
-  const answers = currentQ
-    ? [currentQ.answer_a, currentQ.answer_b, currentQ.answer_c, currentQ.answer_d]
-    : [];
+  const answers = currentQ ? [currentQ.answer_a, currentQ.answer_b, currentQ.answer_c, currentQ.answer_d] : [];
   const letters = ['A', 'B', 'C', 'D'];
+  const timerPercent = (timerValue / (activeRoom?.timerDuration || timerDuration)) * 100;
 
   return (
     <>
@@ -532,9 +629,10 @@ export default function AdminPage() {
           </div>
           <nav className="admin-tabs">
             {([
-              { key: 'control' as const, label: '🎮 Управление', icon: <Zap size={16} /> },
-              { key: 'rooms' as const, label: '🏠 Комнаты', icon: <Users size={16} /> },
-              { key: 'questions' as const, label: '📝 Вопросы', icon: <HelpCircle size={16} /> },
+              { key: 'control' as const, label: 'Управление' },
+              { key: 'rooms' as const, label: 'Комнаты' },
+              { key: 'questions' as const, label: 'Вопросы' },
+              { key: 'settings' as const, label: 'Настройки' },
             ]).map((tab) => (
               <button
                 key={tab.key}
@@ -545,7 +643,7 @@ export default function AdminPage() {
               </button>
             ))}
           </nav>
-          <a href="/" className="admin-back-btn">← На игру</a>
+          <a href="/" className="admin-back-btn">На игру</a>
         </header>
 
         {/* CONTENT */}
@@ -558,34 +656,50 @@ export default function AdminPage() {
               <div className="control-left">
                 {/* Timer Card */}
                 <div className="admin-card control-card">
-                  <h2 className="admin-card-title">⏱️ Таймер</h2>
+                  <h2 className="admin-card-title">Таймер</h2>
                   <div className="control-timer">
-                    <div className="timer-display">
-                      <span className={`timer-value ${timerValue <= 5 && timerRunning ? 'timer-value--danger' : ''} ${timerPaused ? 'timer-value--paused' : ''}`}>
-                        {formatTime(timerValue)}
-                      </span>
-                      <span className="timer-label">
-                        {timerRunning ? 'идёт отсчёт' : timerPaused ? '⏸ на паузе' : 'остановлен'}
-                      </span>
+                    {/* Ring timer */}
+                    <div className="timer-ring-wrap">
+                      <svg className="timer-ring-svg" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+                        <circle
+                          cx="60" cy="60" r="52"
+                          fill="none"
+                          stroke={timerValue <= 5 ? '#ff4444' : '#00d4ff'}
+                          strokeWidth="6"
+                          strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 52}`}
+                          strokeDashoffset={`${2 * Math.PI * 52 * (1 - timerPercent / 100)}`}
+                          style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s', transformOrigin: 'center', transform: 'rotate(-90deg)' }}
+                        />
+                      </svg>
+                      <div className="timer-ring-center">
+                        <span className={`timer-value ${timerValue <= 5 && timerRunning ? 'timer-value--danger' : ''} ${timerPaused ? 'timer-value--paused' : ''}`}>
+                          {formatTime(timerValue)}
+                        </span>
+                        <span className="timer-label">
+                          {timerRunning ? 'идёт' : timerPaused ? 'пауза' : 'стоп'}
+                        </span>
+                      </div>
                     </div>
                     <div className="timer-controls">
                       {!timerRunning && !timerPaused && (
                         <button className="control-btn control-btn--play" onClick={startTimer}>
-                          <Play size={18} /> Старт
+                          <Play size={16} /> Старт
                         </button>
                       )}
                       {timerRunning && (
                         <button className="control-btn control-btn--pause" onClick={pauseTimer}>
-                          <Pause size={18} /> Пауза
+                          <Pause size={16} /> Пауза
                         </button>
                       )}
                       {timerPaused && (
                         <button className="control-btn control-btn--play" onClick={resumeTimer}>
-                          <Play size={18} /> Продолжить
+                          <Play size={16} /> Продолжить
                         </button>
                       )}
                       <button className="control-btn control-btn--reset" onClick={resetTimer}>
-                        <RotateCcw size={18} /> Сброс
+                        <RotateCcw size={16} /> Сброс
                       </button>
                     </div>
                   </div>
@@ -594,77 +708,64 @@ export default function AdminPage() {
                 {/* Lifelines Card */}
                 <div className="admin-card">
                   <div className="admin-card-header">
-                    <h2 className="admin-card-title">💡 Подсказки</h2>
+                    <h2 className="admin-card-title">Подсказки</h2>
                     <button className="btn-reset-lifelines" onClick={resetLifelines}>
-                      <RotateCcw size={14} /> Сбросить
+                      <RotateCcw size={13} /> Сбросить
                     </button>
                   </div>
                   <div className="lifeline-controls">
-                    {/* 50/50 */}
                     <button
-                      className={`lifeline-ctrl lifeline-ctrl--5050 ${!lifeline5050 ? 'lifeline-ctrl--used' : ''} ${lifeline5050Anim ? 'lifeline-ctrl--animating' : ''}`}
+                      className={`lifeline-ctrl lifeline-ctrl--5050 ${!lifeline5050 ? 'lifeline-ctrl--used' : ''}`}
                       onClick={use5050}
                       disabled={!lifeline5050}
                     >
-                      <div className="lifeline-ctrl-icon">
-                        <Scissors size={24} />
-                      </div>
+                      <div className="lifeline-ctrl-icon"><Scissors size={22} /></div>
                       <div className="lifeline-ctrl-info">
                         <span className="lifeline-ctrl-name">50/50</span>
                         <span className="lifeline-ctrl-desc">Убрать 2 ответа</span>
                       </div>
                       <span className={`lifeline-ctrl-status ${lifeline5050 ? 'lifeline-ctrl-status--available' : 'lifeline-ctrl-status--used'}`}>
-                        {lifeline5050 ? 'Доступна' : 'Использована'}
+                        {lifeline5050 ? 'Доступна' : 'Исп.'}
                       </span>
                     </button>
-
-                    {/* Звонок другу */}
                     <button
-                      className={`lifeline-ctrl lifeline-ctrl--phone ${!lifelinePhone ? 'lifeline-ctrl--used' : ''} ${lifelinePhoneAnim ? 'lifeline-ctrl--animating' : ''}`}
+                      className={`lifeline-ctrl lifeline-ctrl--phone ${!lifelinePhone ? 'lifeline-ctrl--used' : ''}`}
                       onClick={usePhone}
                       disabled={!lifelinePhone}
                     >
-                      <div className="lifeline-ctrl-icon">
-                        <Phone size={24} />
-                      </div>
+                      <div className="lifeline-ctrl-icon"><Phone size={22} /></div>
                       <div className="lifeline-ctrl-info">
                         <span className="lifeline-ctrl-name">Звонок другу</span>
                         <span className="lifeline-ctrl-desc">Спросить эксперта</span>
                       </div>
                       <span className={`lifeline-ctrl-status ${lifelinePhone ? 'lifeline-ctrl-status--available' : 'lifeline-ctrl-status--used'}`}>
-                        {lifelinePhone ? 'Доступна' : 'Использована'}
+                        {lifelinePhone ? 'Доступна' : 'Исп.'}
                       </span>
                     </button>
-
-                    {/* Помощь зала */}
                     <button
-                      className={`lifeline-ctrl lifeline-ctrl--audience ${!lifelineAudience ? 'lifeline-ctrl--used' : ''} ${lifelineAudienceAnim ? 'lifeline-ctrl--animating' : ''}`}
+                      className={`lifeline-ctrl lifeline-ctrl--audience ${!lifelineAudience ? 'lifeline-ctrl--used' : ''}`}
                       onClick={useAudience}
                       disabled={!lifelineAudience}
                     >
-                      <div className="lifeline-ctrl-icon">
-                        <Users size={24} />
-                      </div>
+                      <div className="lifeline-ctrl-icon"><Users size={22} /></div>
                       <div className="lifeline-ctrl-info">
                         <span className="lifeline-ctrl-name">Помощь зала</span>
-                        <span className="lifeline-ctrl-desc">Голосование аудитории</span>
+                        <span className="lifeline-ctrl-desc">Голосование</span>
                       </div>
                       <span className={`lifeline-ctrl-status ${lifelineAudience ? 'lifeline-ctrl-status--available' : 'lifeline-ctrl-status--used'}`}>
-                        {lifelineAudience ? 'Доступна' : 'Использована'}
+                        {lifelineAudience ? 'Доступна' : 'Исп.'}
                       </span>
                     </button>
                   </div>
-
-                  {/* Lifeline results */}
                   {phoneResult && (
                     <div className="lifeline-result lifeline-result--phone">
-                      <Phone size={16} />
+                      <Phone size={14} />
                       <span>{phoneResult}</span>
                     </div>
                   )}
                   {audienceResult && (
                     <div className="lifeline-result lifeline-result--audience">
-                      <Users size={16} />
+                      <Users size={14} />
                       <div className="audience-bars">
                         {audienceResult.map((pct, i) => (
                           <div key={i} className="audience-bar-item">
@@ -689,83 +790,100 @@ export default function AdminPage() {
                 {/* Current Question */}
                 <div className="admin-card">
                   <div className="admin-card-header">
-                    <h2 className="admin-card-title">📋 Текущий вопрос</h2>
+                    <h2 className="admin-card-title">
+                      Текущий вопрос
+                      {currentQ && (
+                        <span className="cq-level-inline"> — {prizeLevels[currentLevel]}</span>
+                      )}
+                    </h2>
                     <div className="question-nav-btns">
-                      <button className="control-btn control-btn--reveal" onClick={revealAnswer}>
-                        {showCorrectAnswer ? <EyeOff size={16} /> : <Eye size={16} />}
-                        {showCorrectAnswer ? 'Скрыть' : 'Показать ответ'}
-                      </button>
-                      <button className="control-btn control-btn--next" onClick={nextQuestion}>
-                        <SkipForward size={16} /> Далее
+                      {activeRoom && currentQ && (
+                        <button className="control-btn control-btn--reveal" onClick={revealAnswer}>
+                          <Eye size={14} /> Показать игрокам
+                        </button>
+                      )}
+                      <button className="control-btn control-btn--next" onClick={nextQuestion} disabled={!activeRoom}>
+                        <SkipForward size={14} /> Далее
                       </button>
                     </div>
                   </div>
 
                   {currentQ ? (
                     <div className="current-question-block">
-                      <div className="cq-level-badge">
-                        Вопрос {currentQuestionIdx + 1} / {gameQuestions.length} • {PRIZE_LEVELS[currentLevel]}
+                      <div className="cq-progress">
+                        Вопрос {currentQuestionIdx + 1} / {gameQuestions.length}
+                        {currentQ.category_name && <span className="cq-cat"> · {currentQ.category_name}</span>}
                       </div>
                       <div className="cq-text">{currentQ.text}</div>
                       <div className="cq-answers">
                         {answers.map((ans, i) => (
-                          <button
+                          <div
                             key={i}
                             className={`cq-answer ${hiddenAnswers.includes(i) ? 'cq-answer--hidden' : ''} ${
-                              showCorrectAnswer && i === currentQ.correct_index ? 'cq-answer--correct' : ''
-                            } ${
-                              showCorrectAnswer && selectedAnswer === i && i !== currentQ.correct_index ? 'cq-answer--wrong' : ''
-                            } ${
-                              selectedAnswer === i && !showCorrectAnswer ? 'cq-answer--selected' : ''
+                              i === currentQ.correct_index ? 'cq-answer--correct' : 'cq-answer--wrong-dim'
                             }`}
-                            onClick={() => selectAnswer(i)}
-                            disabled={hiddenAnswers.includes(i)}
                           >
                             <span className="cq-answer-letter">{letters[i]}</span>
                             <span className="cq-answer-text">{ans}</span>
-                            {showCorrectAnswer && i === currentQ.correct_index && (
-                              <CheckCircle size={16} className="cq-answer-icon cq-answer-icon--correct" />
+                            {i === currentQ.correct_index && (
+                              <CheckCircle size={14} className="cq-answer-icon cq-answer-icon--correct" />
                             )}
-                            {showCorrectAnswer && selectedAnswer === i && i !== currentQ.correct_index && (
-                              <XCircle size={16} className="cq-answer-icon cq-answer-icon--wrong" />
-                            )}
-                          </button>
+                          </div>
                         ))}
                       </div>
-                      {currentQ.category_name && (
-                        <div className="cq-meta">
-                          Категория: <strong>{currentQ.category_name}</strong> • Сложность: <strong>{currentQ.difficulty}</strong>
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <div className="cq-empty">
-                      <Zap size={40} />
-                      <p>Создайте комнату во вкладке «Комнаты» для начала игры</p>
+                      <Zap size={36} />
+                      <p>Создайте комнату и настройте очередь вопросов</p>
                     </div>
                   )}
 
-                  {currentQ && !activeRoom && (
-                    <div style={{ marginTop: '12px' }}>
-                      <div className="cq-empty" style={{ padding: '16px' }}>
-                        <p style={{ fontSize: '13px' }}>⚠️ Создайте комнату чтобы игроки увидели вопросы</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {currentQ && activeRoom && currentQuestionIdx === 0 && !showCorrectAnswer && (
-                    <button className="btn-start-game" onClick={startGame} style={{ marginTop: '12px', width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(135deg, rgba(0,255,136,0.15), rgba(0,255,136,0.05))', border: '1px solid rgba(0,255,136,0.3)', borderRadius: '10px', color: '#00ff88', fontWeight: 700, fontSize: '14px', transition: 'all 0.2s' }}>
-                      <Play size={18} /> Начать игру — отправить 1-й вопрос
+                  {currentQ && activeRoom && currentQuestionIdx === 0 && (
+                    <button className="btn-start-game" onClick={startGame} style={{ marginTop: '12px' }}>
+                      <Play size={16} /> Начать игру
                     </button>
+                  )}
+                </div>
+
+                {/* Game Queue */}
+                <div className="admin-card">
+                  <div className="admin-card-header">
+                    <h2 className="admin-card-title">Очередь вопросов ({gameQuestions.length})</h2>
+                  </div>
+                  {gameQuestions.length === 0 ? (
+                    <div className="cq-empty" style={{ padding: '20px' }}>
+                      <p>Добавьте вопросы из вкладки «Вопросы»</p>
+                    </div>
+                  ) : (
+                    <div className="game-queue">
+                      {gameQuestions.map((q, idx) => (
+                        <div key={`${q.id}-${idx}`} className={`queue-item ${idx === currentQuestionIdx ? 'queue-item--current' : ''} ${idx < currentQuestionIdx ? 'queue-item--done' : ''}`}>
+                          <div className="queue-item-num">{idx + 1}</div>
+                          <div className="queue-item-text">{q.text.length > 60 ? q.text.slice(0, 57) + '…' : q.text}</div>
+                          <div className="queue-item-actions">
+                            <button className="q-action-btn" onClick={() => moveQueueItem(idx, -1)} disabled={idx === 0} title="Вверх">
+                              <ChevronUp size={12} />
+                            </button>
+                            <button className="q-action-btn" onClick={() => moveQueueItem(idx, 1)} disabled={idx === gameQuestions.length - 1} title="Вниз">
+                              <ChevronDown size={12} />
+                            </button>
+                            <button className="q-action-btn q-action-btn--delete" onClick={() => removeFromQueue(idx)} title="Удалить из очереди">
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 
                 {/* Prize Ladder Mini */}
                 <div className="admin-card">
-                  <h2 className="admin-card-title">🏆 Шкала выигрыша</h2>
+                  <h2 className="admin-card-title">Шкала выигрыша</h2>
                   <div className="prize-ladder-mini">
-                    {[...PRIZE_LEVELS].reverse().map((lvl, revIdx) => {
-                      const idx = PRIZE_LEVELS.length - 1 - revIdx;
+                    {[...prizeLevels].reverse().map((lvl, revIdx) => {
+                      const idx = prizeLevels.length - 1 - revIdx;
                       return (
                         <div
                           key={idx}
@@ -787,7 +905,7 @@ export default function AdminPage() {
           {activeTab === 'rooms' && (
             <div className="admin-section">
               <div className="admin-card">
-                <h2 className="admin-card-title">🏠 Создать комнату</h2>
+                <h2 className="admin-card-title">Создать комнату</h2>
                 <div className="form-grid">
                   <div className="form-group">
                     <label className="form-label">Название комнаты</label>
@@ -796,7 +914,17 @@ export default function AdminPage() {
                       placeholder="Например: Миллионер Стрим #1"
                       value={roomName}
                       onChange={(e) => setRoomName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && createRoom()}
                     />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Категория вопросов</label>
+                    <select className="form-select" value={roomCategoryFilter ?? ''} onChange={(e) => setRoomCategoryFilter(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">Все категории (случайные)</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Сложность</label>
@@ -820,31 +948,29 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <button className="btn-create-room" onClick={createRoom}>
-                  <Plus size={18} /> Создать комнату
+                  <Plus size={16} /> Создать комнату
                 </button>
               </div>
 
               {activeRoom && (
                 <div className="admin-card active-room-card">
-                  <h2 className="admin-card-title">🟢 Активная комната</h2>
+                  <h2 className="admin-card-title">Активная комната</h2>
                   <div className="active-room-info">
                     <div className="active-room-name">{activeRoom.name}</div>
                     <div className="active-room-code">
                       Код: <strong>{activeRoom.code}</strong>
                       <button className="btn-copy" onClick={() => copyRoomLink(activeRoom.code)}>
-                        <Copy size={14} />
+                        <Copy size={13} />
                         {copyFeedback === activeRoom.code ? 'Скопировано!' : 'Копировать ссылку'}
                       </button>
                     </div>
-                    <div className="active-room-link">
-                      {window.location.origin}/room/{activeRoom.code}
-                    </div>
+                    <div className="active-room-link">{window.location.origin}/room/{activeRoom.code}</div>
                   </div>
                 </div>
               )}
 
               <div className="admin-card">
-                <h2 className="admin-card-title">📋 Все комнаты</h2>
+                <h2 className="admin-card-title">Все комнаты</h2>
                 {rooms.length === 0 ? (
                   <div className="empty-state">Комнат пока нет. Создайте первую!</div>
                 ) : (
@@ -859,9 +985,19 @@ export default function AdminPage() {
                           <span className={`room-status room-status--${room.status}`}>
                             {room.status === 'waiting' ? 'Ожидание' : room.status === 'playing' ? 'Идёт' : 'Завершена'}
                           </span>
-                          <span className="room-players"><Users size={14} /> {room.participant_count || 0}</span>
-                          <button className="btn-copy-sm" onClick={() => copyRoomLink(room.code)}>
+                          <span className="room-players"><Users size={13} /> {room.participant_count || 0}</span>
+                        </div>
+                        <div className="room-item-actions">
+                          <button className="btn-copy-sm" onClick={() => copyRoomLink(room.code)} title="Скопировать ссылку">
                             <Copy size={12} />
+                          </button>
+                          {room.status !== 'finished' && (
+                            <button className="q-action-btn" onClick={() => closeRoom(room.code)} title="Закрыть комнату">
+                              <StopCircle size={13} />
+                            </button>
+                          )}
+                          <button className="q-action-btn q-action-btn--delete" onClick={() => deleteRoom(room.code)} title="Удалить комнату">
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </div>
@@ -875,34 +1011,45 @@ export default function AdminPage() {
           {/* ═══════ QUESTIONS TAB ═══════ */}
           {activeTab === 'questions' && (
             <div className="admin-section">
+              {/* Category management */}
+              <div className="admin-card">
+                <h2 className="admin-card-title">Категории</h2>
+                <div className="category-list">
+                  {categories.map(c => (
+                    <span key={c.id} className="category-tag"><Tag size={11} /> {c.name}</span>
+                  ))}
+                </div>
+                <div className="new-category-form">
+                  <input
+                    className="form-input form-input--sm"
+                    placeholder="Новая категория..."
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && createCategory()}
+                  />
+                  <button className="btn-add-category" onClick={createCategory}>
+                    <Plus size={14} /> Добавить
+                  </button>
+                </div>
+              </div>
+
               <div className="admin-card">
                 <div className="admin-card-header">
-                  <h2 className="admin-card-title">📝 Вопросы ({questions.length})</h2>
-                  <button
-                    className="btn-add-question"
-                    onClick={() => { setShowForm(true); setEditingId(null); setQuestionForm(emptyForm); }}
-                  >
-                    <Plus size={16} /> Добавить вопрос
+                  <h2 className="admin-card-title">Вопросы ({questions.length})</h2>
+                  <button className="btn-add-question" onClick={() => { setShowForm(true); setEditingId(null); setQuestionForm(emptyForm); }}>
+                    <Plus size={14} /> Добавить вопрос
                   </button>
                 </div>
 
                 {/* Filters */}
                 <div className="question-filters">
-                  <select
-                    className="form-select form-select--sm"
-                    value={filterCategory}
-                    onChange={(e) => setFilterCategory(e.target.value)}
-                  >
+                  <select className="form-select form-select--sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
                     <option value="">Все категории</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
-                  <select
-                    className="form-select form-select--sm"
-                    value={filterDifficulty}
-                    onChange={(e) => setFilterDifficulty(e.target.value)}
-                  >
+                  <select className="form-select form-select--sm" value={filterDifficulty} onChange={(e) => setFilterDifficulty(e.target.value)}>
                     <option value="">Все сложности</option>
                     <option value="easy">Лёгкий</option>
                     <option value="medium">Средний</option>
@@ -914,9 +1061,9 @@ export default function AdminPage() {
                 {showForm && (
                   <div className="question-form">
                     <div className="question-form-header">
-                      <h3>{editingId ? '✏️ Редактирование вопроса' : '➕ Новый вопрос'}</h3>
+                      <h3>{editingId ? 'Редактирование вопроса' : 'Новый вопрос'}</h3>
                       <button className="btn-close-form" onClick={() => { setShowForm(false); setEditingId(null); }}>
-                        <X size={18} />
+                        <X size={16} />
                       </button>
                     </div>
                     <div className="form-group">
@@ -936,7 +1083,7 @@ export default function AdminPage() {
                           <div key={letter} className="form-group">
                             <label className="form-label">
                               Ответ {letter}
-                              {questionForm.correctIndex === idx && <span className="correct-badge">✓ Правильный</span>}
+                              {questionForm.correctIndex === idx && <span className="correct-badge">Правильный</span>}
                             </label>
                             <div className="answer-input-wrap">
                               <input
@@ -986,7 +1133,7 @@ export default function AdminPage() {
                     </div>
                     <div className="form-actions">
                       <button className="btn-save" onClick={saveQuestion}>
-                        <Save size={16} /> {editingId ? 'Обновить' : 'Сохранить'}
+                        <Save size={14} /> {editingId ? 'Обновить' : 'Сохранить'}
                       </button>
                       <button className="btn-cancel" onClick={() => { setShowForm(false); setEditingId(null); }}>
                         Отмена
@@ -1019,16 +1166,62 @@ export default function AdminPage() {
                           </span>
                         </div>
                         <div className="question-item-actions">
+                          <button className="q-action-btn" onClick={() => addToQueue(q)} title="В очередь">
+                            <Plus size={13} />
+                          </button>
                           <button className="q-action-btn" onClick={() => startEdit(q)} title="Редактировать">
-                            <Edit3 size={14} />
+                            <Edit3 size={13} />
                           </button>
                           <button className="q-action-btn q-action-btn--delete" onClick={() => deleteQuestion(q.id)} title="Удалить">
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ SETTINGS TAB ═══════ */}
+          {activeTab === 'settings' && (
+            <div className="admin-section">
+              <div className="admin-card">
+                <div className="admin-card-header">
+                  <h2 className="admin-card-title">Шкала выигрыша (15 уровней)</h2>
+                  {!editingPrize ? (
+                    <button className="control-btn control-btn--reveal" onClick={() => { setPrizeDraft([...prizeLevels]); setEditingPrize(true); }}>
+                      <Edit3 size={14} /> Редактировать
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn-save" onClick={() => { setPrizeLevels([...prizeDraft]); setEditingPrize(false); showNotify('Шкала сохранена', 'success'); }}>
+                        <Save size={14} /> Сохранить
+                      </button>
+                      <button className="btn-cancel" onClick={() => setEditingPrize(false)}>Отмена</button>
+                    </div>
+                  )}
+                </div>
+                <div className="prize-editor">
+                  {(editingPrize ? prizeDraft : prizeLevels).map((lvl, idx) => (
+                    <div key={idx} className="prize-editor-row">
+                      <span className="prize-editor-num">{idx + 1}</span>
+                      {editingPrize ? (
+                        <input
+                          className="form-input form-input--sm prize-editor-input"
+                          value={prizeDraft[idx]}
+                          onChange={(e) => {
+                            const next = [...prizeDraft];
+                            next[idx] = e.target.value;
+                            setPrizeDraft(next);
+                          }}
+                        />
+                      ) : (
+                        <span className={`prize-editor-label ${idx === currentLevel ? 'prize-editor-label--current' : ''}`}>{lvl}</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
