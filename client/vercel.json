@@ -1,5 +1,16 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://millionaire-game-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/socket.io/:path*",
+      "destination": "https://millionaire-game-production.up.railway.app/socket.io/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

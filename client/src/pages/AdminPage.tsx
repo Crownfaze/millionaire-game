@@ -607,7 +607,8 @@ export default function AdminPage() {
   const currentQ = gameQuestions[currentQuestionIdx] || null;
   const answers = currentQ ? [currentQ.answer_a, currentQ.answer_b, currentQ.answer_c, currentQ.answer_d] : [];
   const letters = ['A', 'B', 'C', 'D'];
-  const timerPercent = (timerValue / (activeRoom?.timerDuration || timerDuration)) * 100;
+  const maxTime = activeRoom?.timerDuration || timerDuration;
+  const timerPercent = Math.min(100, Math.max(0, (timerValue / (maxTime || 1)) * 100));
 
   return (
     <>
@@ -662,16 +663,18 @@ export default function AdminPage() {
                     <div className="timer-ring-wrap">
                       <svg className="timer-ring-svg" viewBox="0 0 120 120">
                         <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
-                        <circle
-                          cx="60" cy="60" r="52"
-                          fill="none"
-                          stroke={timerValue <= 5 ? '#ff4444' : '#00d4ff'}
-                          strokeWidth="6"
-                          strokeLinecap="round"
-                          strokeDasharray={`${2 * Math.PI * 52}`}
-                          strokeDashoffset={`${2 * Math.PI * 52 * (1 - timerPercent / 100)}`}
-                          style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s', transformOrigin: 'center', transform: 'rotate(-90deg)' }}
-                        />
+                        <g transform="rotate(-90 60 60)">
+                          <circle
+                            cx="60" cy="60" r="52"
+                            fill="none"
+                            stroke={timerValue <= 5 ? '#ff4444' : '#00d4ff'}
+                            strokeWidth="6"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2 * Math.PI * 52}`}
+                            strokeDashoffset={`${2 * Math.PI * 52 * (1 - timerPercent / 100)}`}
+                            style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s' }}
+                          />
+                        </g>
                       </svg>
                       <div className="timer-ring-center">
                         <span className={`timer-value ${timerValue <= 5 && timerRunning ? 'timer-value--danger' : ''} ${timerPaused ? 'timer-value--paused' : ''}`}>

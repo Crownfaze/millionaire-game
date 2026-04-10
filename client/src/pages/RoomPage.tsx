@@ -308,16 +308,18 @@ export default function RoomPage() {
               <div className={`room-timer-wrap ${timerValue <= 5 ? 'room-timer--danger' : ''} ${timerPaused ? 'room-timer--paused' : ''}`}>
                 <svg className="room-timer-svg" viewBox="0 0 60 60">
                   <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
-                  <circle
-                    cx="30" cy="30" r="26"
-                    fill="none"
-                    stroke={timerValue <= 5 ? '#ff4444' : '#00d4ff'}
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 26}`}
-                    strokeDashoffset={`${2 * Math.PI * 26 * (1 - timerPercent / 100)}`}
-                    style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s', transformOrigin: 'center', transform: 'rotate(-90deg)' }}
-                  />
+                  <g transform="rotate(-90 30 30)">
+                    <circle
+                      cx="30" cy="30" r="26"
+                      fill="none"
+                      stroke={timerValue <= 5 ? '#ff4444' : '#00d4ff'}
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 26}`}
+                      strokeDashoffset={`${2 * Math.PI * 26 * (1 - timerPercent / 100)}`}
+                      style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s' }}
+                    />
+                  </g>
                 </svg>
                 <span className="room-timer-text">{timerValue}</span>
                 {timerPaused && <span className="room-timer-pause-icon">⏸</span>}
