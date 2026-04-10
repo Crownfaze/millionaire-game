@@ -189,25 +189,39 @@ export default function AdminPage() {
     fetchRooms();
   }, [fetchQuestions, fetchCategories, fetchRooms]);
 
-  /* ─── Socket listeners (timer sync) ─── */
+  /* ─── Socket listeners (timer sync from server) ─── */
   useEffect(() => {
     const socket = getSocket();
 
     socket.on('timer:sync', (data: { remaining: number; total: number }) => {
       setTimerValue(data.remaining);
+      setTimerRunning(true);
+      setTimerPaused(false);
+    });
+
+    socket.on('timer:paused', () => {
+      setTimerRunning(false);
+      setTimerPaused(true);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    });
+
+    socket.on('timer:resumed', () => {
+      setTimerRunning(true);
+      setTimerPaused(false);
     });
 
     socket.on('timer:expired', () => {
       setTimerValue(0);
       setTimerRunning(false);
       setTimerPaused(false);
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       showNotify('Время вышло!', 'error');
     });
 
     return () => {
       socket.off('timer:sync');
+      socket.off('timer:paused');
+      socket.off('timer:resumed');
       socket.off('timer:expired');
     };
   }, [showNotify]);
@@ -279,7 +293,7 @@ export default function AdminPage() {
     const dur = activeRoom?.timerDuration || timerDuration;
     setTimerValue(dur);
     setTimerRunning(false);
-    setTimerPaused(false);
+    setTimerPaused(true); // reset = paused at initial value
 
     if (activeRoom) {
       const socket = getSocket();
@@ -496,10 +510,14 @@ export default function AdminPage() {
 
   const startGame = useCallback(() => {
     if (gameQuestions.length === 0 || !activeRoom) return;
+    // game:question on server auto-starts the timer — no need to call startTimer separately
     sendQuestionToPlayers(gameQuestions[0], 0);
-    startTimer();
+    const dur = activeRoom.timerDuration || timerDuration;
+    setTimerValue(dur);
+    setTimerRunning(true);
+    setTimerPaused(false);
     showNotify('Игра началась! Вопрос отправлен.', 'success');
-  }, [gameQuestions, activeRoom, sendQuestionToPlayers, startTimer, showNotify]);
+  }, [gameQuestions, activeRoom, sendQuestionToPlayers, timerDuration, showNotify]);
 
   const nextQuestion = useCallback(() => {
     if (currentQuestionIdx < gameQuestions.length - 1) {
@@ -510,23 +528,21 @@ export default function AdminPage() {
       setHiddenAnswers([]);
       setPhoneResult(null);
       setAudienceResult(null);
-      resetTimer();
+
+      // game:question server handler auto-starts timer — just reset admin display
+      const dur = activeRoom?.timerDuration || timerDuration;
+      setTimerValue(dur);
+      setTimerRunning(true);
+      setTimerPaused(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
 
       sendQuestionToPlayers(gameQuestions[nextIdx], nextLevel);
       showNotify(`Вопрос ${nextIdx + 1} / ${gameQuestions.length}`, 'info');
-
-      // Auto-start server timer after reset
-      setTimeout(() => {
-        if (activeRoom) {
-          const socket = getSocket();
-          socket.emit('timer:reset', { roomCode: activeRoom.code, duration: activeRoom.timerDuration || timerDuration });
-        }
-        startTimer();
-      }, 300);
     } else {
       showNotify('Все вопросы пройдены!', 'success');
     }
-  }, [currentQuestionIdx, currentLevel, gameQuestions, prizeLevels, resetTimer, startTimer, showNotify, sendQuestionToPlayers, activeRoom, timerDuration]);
+  }, [currentQuestionIdx, currentLevel, gameQuestions, prizeLevels, showNotify, sendQuestionToPlayers, activeRoom, timerDuration]);
 
   const revealAnswer = useCallback(() => {
     if (activeRoom && gameQuestions[currentQuestionIdx]) {
@@ -535,10 +551,13 @@ export default function AdminPage() {
         roomCode: activeRoom.code,
         correctIndex: gameQuestions[currentQuestionIdx].correct_index,
       });
-      pauseTimer();
+      // Server pauses timer on game:reveal — sync local state
+      setTimerPaused(true);
+      setTimerRunning(false);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       showNotify('Правильный ответ показан игрокам', 'info');
     }
-  }, [pauseTimer, showNotify, activeRoom, gameQuestions, currentQuestionIdx]);
+  }, [showNotify, activeRoom, gameQuestions, currentQuestionIdx]);
 
   /* ─── Lifeline handlers ─── */
   const use5050 = useCallback(() => {

@@ -8,7 +8,6 @@ interface RoomTimer {
   isPaused: boolean;
 }
 
-// In-memory game state per room
 interface RoomGameState {
   hostSocketId: string | null;
   hostId: string;
@@ -30,21 +29,16 @@ const roomStates = new Map<string, RoomGameState>();
 
 export function setupSocketHandlers(io: Server, db: Database.Database) {
   io.on('connection', (socket: Socket) => {
-    console.log(`🔌 Client connected: ${socket.id}`);
+    console.log(`Client connected: ${socket.id}`);
 
     // ── Admin joins room as host ──
     socket.on('admin:join', (data: { roomCode: string; hostId: string }) => {
       const { roomCode, hostId } = data;
-
       const room = db.prepare('SELECT * FROM rooms WHERE code = ?').get(roomCode) as Record<string, unknown> | undefined;
-      if (!room) {
-        socket.emit('error', { message: 'Комната не найдена' });
-        return;
-      }
+      if (!room) { socket.emit('error', { message: 'Комната не найдена' }); return; }
 
       socket.join(roomCode);
 
-      // Initialize or update game state
       if (!roomStates.has(roomCode)) {
         roomStates.set(roomCode, {
           hostSocketId: socket.id,
@@ -58,27 +52,21 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
           status: 'waiting',
         });
       } else {
-        const state = roomStates.get(roomCode)!;
-        state.hostSocketId = socket.id;
+        roomStates.get(roomCode)!.hostSocketId = socket.id;
       }
 
       socket.emit('admin:joined', { roomCode });
-      console.log(`👑 Admin joined room ${roomCode}`);
+      console.log(`Admin joined room ${roomCode}`);
     });
 
     // ── Player joins room ──
     socket.on('room:join', (data: { roomCode: string; playerName: string }) => {
       const { roomCode, playerName } = data;
-
       const room = db.prepare('SELECT * FROM rooms WHERE code = ?').get(roomCode) as Record<string, unknown> | undefined;
-      if (!room) {
-        socket.emit('error', { message: 'Комната не найдена' });
-        return;
-      }
+      if (!room) { socket.emit('error', { message: 'Комната не найдена' }); return; }
 
       socket.join(roomCode);
 
-      // Check for existing participant with same name (reconnect)
       const existing = db.prepare('SELECT * FROM participants WHERE room_code = ? AND name = ?').get(roomCode, playerName) as Record<string, unknown> | undefined;
       if (existing) {
         db.prepare('UPDATE participants SET socket_id = ? WHERE id = ?').run(socket.id, existing.id);
@@ -87,42 +75,39 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       }
 
       const participants = db.prepare('SELECT * FROM participants WHERE room_code = ?').all(roomCode);
-
-      // Send current game state to the player
       const gameState = roomStates.get(roomCode);
+      const timer = roomTimers.get(roomCode);
+
       socket.emit('room:joined', {
         roomCode,
         playerName,
         roomName: room.name as string,
         status: room.status as string,
+        timerState: timer ? {
+          remaining: timer.remaining,
+          total: timer.duration,
+          isPaused: timer.isPaused,
+        } : null,
         gameState: gameState ? {
           currentQuestion: gameState.currentQuestion ? {
             text: gameState.currentQuestion.text,
             answers: gameState.currentQuestion.answers,
-            // Don't send correct index to players
           } : null,
           currentLevel: gameState.currentLevel,
           lifelines: gameState.lifelines,
           hiddenAnswers: gameState.hiddenAnswers,
-          showCorrectAnswer: gameState.showCorrectAnswer,
-          selectedAnswer: gameState.selectedAnswer,
           status: gameState.status,
         } : null,
       });
 
-      // Notify everyone in room
       io.to(roomCode).emit('room:update', { participants });
-      console.log(`👤 ${playerName} joined room ${roomCode}`);
+      console.log(`${playerName} joined room ${roomCode}`);
     });
 
     // ── Admin sends new question ──
     socket.on('game:question', (data: {
       roomCode: string;
-      question: {
-        text: string;
-        answers: Array<{ label: string; text: string }>;
-        correctIndex: number;
-      };
+      question: { text: string; answers: Array<{ label: string; text: string }>; correctIndex: number };
       level: number;
       timerDuration: number;
     }) => {
@@ -137,24 +122,19 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       state.hiddenAnswers = [];
       state.status = 'playing';
 
-      // Update room status in DB
       db.prepare("UPDATE rooms SET status = 'playing' WHERE code = ?").run(roomCode);
       db.prepare("UPDATE participants SET status = 'active' WHERE room_code = ?").run(roomCode);
 
-      // Start timer
+      // Start timer automatically when question arrives
       startTimer(io, roomCode, timerDuration);
 
-      // Send to all players (without correct index!)
       io.to(roomCode).emit('game:question', {
-        question: {
-          text: question.text,
-          answers: question.answers,
-        },
+        question: { text: question.text, answers: question.answers },
         level,
         timerDuration,
       });
 
-      console.log(`📝 Question sent to room ${roomCode}: ${question.text.substring(0, 30)}...`);
+      console.log(`Question sent to room ${roomCode}: ${question.text.substring(0, 30)}...`);
     });
 
     // ── Admin reveals answer ──
@@ -162,19 +142,17 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       const { roomCode, correctIndex } = data;
       const state = roomStates.get(roomCode);
       if (!state) return;
-
       state.showCorrectAnswer = true;
-      stopTimer(roomCode);
-
+      pauseTimer(roomCode);
+      io.to(roomCode).emit('timer:paused');
       io.to(roomCode).emit('game:reveal', { correctIndex });
     });
 
-    // ── Admin selects an answer (visual) ──
+    // ── Admin selects an answer (visual highlight) ──
     socket.on('game:selectAnswer', (data: { roomCode: string; answerIndex: number }) => {
       const { roomCode, answerIndex } = data;
       const state = roomStates.get(roomCode);
       if (!state) return;
-
       state.selectedAnswer = answerIndex;
       io.to(roomCode).emit('game:selectAnswer', { answerIndex });
     });
@@ -191,10 +169,7 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       const state = roomStates.get(roomCode);
       if (!state) return;
 
-      if (type === '5050') {
-        state.lifelines.fiftyFifty = false;
-        if (hiddenAnswers) state.hiddenAnswers = hiddenAnswers;
-      }
+      if (type === '5050') { state.lifelines.fiftyFifty = false; if (hiddenAnswers) state.hiddenAnswers = hiddenAnswers; }
       if (type === 'phone') state.lifelines.phoneAFriend = false;
       if (type === 'audience') state.lifelines.askAudience = false;
 
@@ -205,14 +180,12 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
     socket.on('game:resetLifelines', (data: { roomCode: string }) => {
       const state = roomStates.get(data.roomCode);
       if (!state) return;
-
       state.lifelines = { fiftyFifty: true, phoneAFriend: true, askAudience: true };
       state.hiddenAnswers = [];
-
       io.to(data.roomCode).emit('game:resetLifelines');
     });
 
-    // ── Timer controls from admin ──
+    // ── Timer controls ──
     socket.on('timer:pause', (data: { roomCode: string }) => {
       pauseTimer(data.roomCode);
       io.to(data.roomCode).emit('timer:paused');
@@ -223,52 +196,46 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       io.to(data.roomCode).emit('timer:resumed');
     });
 
+    // Reset: stop timer, set to initial value, paused — admin must press Start to run
     socket.on('timer:reset', (data: { roomCode: string; duration: number }) => {
       stopTimer(data.roomCode);
-      startTimer(io, data.roomCode, data.duration);
-      io.to(data.roomCode).emit('timer:reset', { duration: data.duration });
+      const timer: RoomTimer = {
+        remaining: data.duration,
+        duration: data.duration,
+        isPaused: true,
+        intervalId: null,
+      };
+      roomTimers.set(data.roomCode, timer);
+      io.to(data.roomCode).emit('timer:sync', { remaining: data.duration, total: data.duration });
+      io.to(data.roomCode).emit('timer:paused');
     });
 
     // ── Player submits answer ──
-    socket.on('answer:submit', (data: {
-      roomCode: string;
-      answerIndex: number;
-    }) => {
+    socket.on('answer:submit', (data: { roomCode: string; answerIndex: number }) => {
       const { roomCode, answerIndex } = data;
-
-      db.prepare("UPDATE participants SET status = 'answered' WHERE room_code = ? AND socket_id = ?")
-        .run(roomCode, socket.id);
-
+      db.prepare("UPDATE participants SET status = 'answered' WHERE room_code = ? AND socket_id = ?").run(roomCode, socket.id);
       const participant = db.prepare('SELECT name FROM participants WHERE socket_id = ?').get(socket.id) as { name: string } | undefined;
-
-      // Notify admin
       io.to(roomCode).emit('answer:received', {
         socketId: socket.id,
         playerName: participant?.name || 'Unknown',
         answerIndex,
       });
-
-      // Send updated participants
       const participants = db.prepare('SELECT * FROM participants WHERE room_code = ?').all(roomCode);
       io.to(roomCode).emit('room:update', { participants });
     });
 
     // ── End game ──
     socket.on('game:end', (data: { roomCode: string }) => {
-      const { roomCode } = data;
-      stopTimer(roomCode);
-      db.prepare("UPDATE rooms SET status = 'finished' WHERE code = ?").run(roomCode);
-      roomStates.delete(roomCode);
-      io.to(roomCode).emit('game:end', { message: 'Игра завершена!' });
+      stopTimer(data.roomCode);
+      db.prepare("UPDATE rooms SET status = 'finished' WHERE code = ?").run(data.roomCode);
+      roomStates.delete(data.roomCode);
+      io.to(data.roomCode).emit('game:end', { message: 'Игра завершена!' });
     });
 
     // ── Disconnect ──
     socket.on('disconnect', () => {
       db.prepare('DELETE FROM participants WHERE socket_id = ?').run(socket.id);
-
-      // Update participant lists in all rooms this socket was in
-      // (Socket.IO already removed them from rooms)
-      console.log(`🔌 Client disconnected: ${socket.id}`);
+      console.log(`Client disconnected: ${socket.id}`);
     });
   });
 }
@@ -284,8 +251,6 @@ function startTimer(io: Server, roomCode: string, duration: number) {
   };
 
   timer.intervalId = setInterval(() => {
-    if (timer.isPaused) return;
-
     timer.remaining--;
     io.to(roomCode).emit('timer:sync', { remaining: timer.remaining, total: timer.duration });
 
@@ -309,14 +274,26 @@ function stopTimer(roomCode: string) {
 
 function pauseTimer(roomCode: string) {
   const timer = roomTimers.get(roomCode);
-  if (timer) {
-    timer.isPaused = true;
+  if (!timer) return;
+  if (timer.intervalId) {
+    clearInterval(timer.intervalId);
+    timer.intervalId = null;
   }
+  timer.isPaused = true;
 }
 
 function resumeTimer(io: Server, roomCode: string) {
   const timer = roomTimers.get(roomCode);
-  if (timer) {
-    timer.isPaused = false;
-  }
+  if (!timer) return;
+  timer.isPaused = false;
+  if (timer.intervalId) return; // already running
+
+  timer.intervalId = setInterval(() => {
+    timer.remaining--;
+    io.to(roomCode).emit('timer:sync', { remaining: timer.remaining, total: timer.duration });
+    if (timer.remaining <= 0) {
+      stopTimer(roomCode);
+      io.to(roomCode).emit('timer:expired');
+    }
+  }, 1000);
 }

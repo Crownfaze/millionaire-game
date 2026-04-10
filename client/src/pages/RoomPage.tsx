@@ -17,7 +17,6 @@ export default function RoomPage() {
   const { code } = useParams<{ code: string }>();
   const socketRef = useRef(getSocket());
 
-  // Connection state
   const [status, setStatus] = useState<RoomStatus>('connecting');
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
@@ -25,26 +24,21 @@ export default function RoomPage() {
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
-  // Game state from server
   const [question, setQuestion] = useState<{ text: string; answers: AnswerOption[] } | null>(null);
   const [currentLevel, setCurrentLevel] = useState(0);
   const [timerValue, setTimerValue] = useState(30);
   const [timerTotal, setTimerTotal] = useState(30);
   const [timerPaused, setTimerPaused] = useState(false);
 
-  // Answer state
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [correctAnswer, setCorrectAnswer] = useState<number | null>(null);
   const [adminSelectedAnswer, setAdminSelectedAnswer] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  // Lifeline state
   const [hiddenAnswers, setHiddenAnswers] = useState<number[]>([]);
   const [lifelines, setLifelines] = useState({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
   const [phoneResult, setPhoneResult] = useState<string | null>(null);
   const [audienceResult, setAudienceResult] = useState<number[] | null>(null);
-
-  // Game over
   const [gameOverMessage, setGameOverMessage] = useState<string | null>(null);
 
   /* ─── Socket listeners ─── */
@@ -58,18 +52,23 @@ export default function RoomPage() {
     });
 
     socket.on('disconnect', () => setConnected(false));
+    socket.on('connect_error', () => setError('Не удалось подключиться к серверу'));
+    socket.on('error', (data: { message: string }) => setError(data.message));
 
-    socket.on('connect_error', () => {
-      setError('Не удалось подключиться к серверу');
-    });
-
-    socket.on('error', (data: { message: string }) => {
-      setError(data.message);
-    });
-
-    socket.on('room:joined', (data: { roomCode: string; playerName: string; roomName: string; status: string }) => {
+    socket.on('room:joined', (data: {
+      roomCode: string;
+      playerName: string;
+      roomName: string;
+      status: string;
+      timerState?: { remaining: number; total: number; isPaused: boolean } | null;
+    }) => {
       setRoomName(data.roomName || data.roomCode);
       setStatus(data.status === 'playing' ? 'playing' : 'waiting');
+      if (data.timerState) {
+        setTimerValue(data.timerState.remaining);
+        setTimerTotal(data.timerState.total);
+        setTimerPaused(data.timerState.isPaused);
+      }
     });
 
     socket.on('game:question', (data: {
@@ -94,6 +93,7 @@ export default function RoomPage() {
 
     socket.on('game:reveal', (data: { correctIndex: number }) => {
       setCorrectAnswer(data.correctIndex);
+      setTimerPaused(true);
     });
 
     socket.on('game:selectAnswer', (data: { answerIndex: number }) => {
@@ -127,24 +127,18 @@ export default function RoomPage() {
       setAudienceResult(null);
     });
 
-    // Timer sync — server controls the timer, client just displays
     socket.on('timer:sync', (data: { remaining: number; total: number }) => {
       setTimerValue(data.remaining);
       setTimerTotal(data.total);
-      setTimerPaused(false);
     });
 
     socket.on('timer:paused', () => setTimerPaused(true));
     socket.on('timer:resumed', () => setTimerPaused(false));
-    socket.on('timer:expired', () => {
-      setTimerValue(0);
-      setTimerPaused(false);
-    });
-
+    socket.on('timer:expired', () => { setTimerValue(0); setTimerPaused(false); });
     socket.on('timer:reset', (data: { duration: number }) => {
       setTimerValue(data.duration);
       setTimerTotal(data.duration);
-      setTimerPaused(false);
+      setTimerPaused(true);
     });
 
     socket.on('game:end', (data: { message: string }) => {
@@ -152,32 +146,18 @@ export default function RoomPage() {
       setGameOverMessage(data.message);
     });
 
-    if (socket.connected) {
-      setConnected(true);
-      setStatus('joining');
-    }
+    if (socket.connected) { setConnected(true); setStatus('joining'); }
 
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-      socket.off('error');
-      socket.off('room:joined');
-      socket.off('game:question');
-      socket.off('game:reveal');
-      socket.off('game:selectAnswer');
-      socket.off('game:lifeline');
-      socket.off('game:resetLifelines');
-      socket.off('timer:sync');
-      socket.off('timer:paused');
-      socket.off('timer:resumed');
-      socket.off('timer:expired');
-      socket.off('timer:reset');
+      socket.off('connect'); socket.off('disconnect'); socket.off('connect_error');
+      socket.off('error'); socket.off('room:joined'); socket.off('game:question');
+      socket.off('game:reveal'); socket.off('game:selectAnswer'); socket.off('game:lifeline');
+      socket.off('game:resetLifelines'); socket.off('timer:sync'); socket.off('timer:paused');
+      socket.off('timer:resumed'); socket.off('timer:expired'); socket.off('timer:reset');
       socket.off('game:end');
     };
   }, []); // eslint-disable-line
 
-  /* ─── Join room ─── */
   const joinRoom = useCallback(() => {
     if (!nameInput.trim() || !code) return;
     const name = nameInput.trim();
@@ -185,7 +165,6 @@ export default function RoomPage() {
     socketRef.current.emit('room:join', { roomCode: code, playerName: name });
   }, [nameInput, code]);
 
-  /* ─── Submit answer ─── */
   const submitAnswer = useCallback((idx: number) => {
     if (submitted || !code || correctAnswer !== null || hiddenAnswers.includes(idx)) return;
     setSelectedAnswer(idx);
@@ -193,55 +172,97 @@ export default function RoomPage() {
     socketRef.current.emit('answer:submit', { roomCode: code, answerIndex: idx });
   }, [submitted, code, correctAnswer, hiddenAnswers]);
 
-  /* ─── Timer helpers ─── */
-  const timerPercent = timerTotal > 0 ? (timerValue / timerTotal) * 100 : 0;
+  const timerPercent = timerTotal > 0 ? Math.min(100, Math.max(0, (timerValue / timerTotal) * 100)) : 0;
   const letters = ['A', 'B', 'C', 'D'];
   const prizeLevelLabel = PRIZE_LEVELS[Math.min(currentLevel, PRIZE_LEVELS.length - 1)]?.label ?? '';
 
-  /* ─── Answer class ─── */
   const getAnswerClass = (i: number): string => {
-    if (hiddenAnswers.includes(i)) return 'room-answer--hidden';
+    if (hiddenAnswers.includes(i)) return 'answer-btn--dimmed';
     if (correctAnswer !== null) {
-      if (i === correctAnswer) return 'room-answer--correct';
-      if (selectedAnswer === i) return 'room-answer--wrong';
-      return 'room-answer--dimmed';
+      if (i === correctAnswer) return 'answer-btn--correct';
+      if (selectedAnswer === i) return 'answer-btn--wrong';
+      return 'answer-btn--dimmed';
     }
-    if (adminSelectedAnswer === i) return 'room-answer--admin-selected';
-    if (selectedAnswer === i) return 'room-answer--selected';
-    return '';
+    if (adminSelectedAnswer === i) return 'answer-btn--selected';
+    if (selectedAnswer === i) return 'answer-btn--selected';
+    return 'answer-btn--default';
   };
 
-  return (
-    <>
-      <StudioBackground />
+  /* ── Shared Header ── */
+  const PageHeader = ({ right }: { right?: React.ReactNode }) => (
+    <header className="game-header" id="game-header">
+      <div className="header-logo">
+        <div className="logo-badge"><span>M</span></div>
+        <span className="logo-text">МИЛЛИОНЕР</span>
+      </div>
+      <nav className="header-nav" id="main-nav">
+        <a href="/" className="nav-btn nav-btn--primary">ИГРАТЬ</a>
+        <a href="/rules" className="nav-btn nav-btn--secondary">ПРАВИЛА</a>
+      </nav>
+      {right ?? (
+        <div className="header-account">
+          <div className="account-info">
+            <div className="account-name">Комната</div>
+            <div className="account-balance">{code}</div>
+          </div>
+          <div className="account-avatar">
+            <span style={{ fontSize: 22 }}>M</span>
+          </div>
+        </div>
+      )}
+    </header>
+  );
 
-      {/* ── JOIN SCREEN ── */}
-      {(status === 'connecting' || status === 'joining') && (
-        <div className="game-page" id="room-page">
-          <div className="room-center-screen">
-            <div className="room-logo-wrap">
-              <div className="logo-badge logo-badge--xl"><span>M</span></div>
-              <h1 className="room-brand">МИЛЛИОНЕР</h1>
+  /* ── Shared Prize Sidebar (static) ── */
+  const StaticPrizeSidebar = () => (
+    <aside className="prize-sidebar" id="prize-sidebar">
+      <div className="prize-header">
+        <div className="prize-header-label">Выигрыш</div>
+        <div className="prize-header-amount">1 000 000 ₽</div>
+      </div>
+      <div className="prize-ladder">
+        <div className="prize-bar-container">
+          <div className="prize-bar-track">
+            <div className="prize-bar-fill" style={{ height: '0%' }} />
+          </div>
+        </div>
+        <div className="prize-levels">
+          {[...PRIZE_LEVELS].reverse().map((level) => (
+            <div key={level.amount} className="prize-level">
+              <span className="prize-level-dot" />
+              <span>{level.label}</span>
             </div>
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
 
-            <div className="room-join-card">
-              <div className="room-code-display">
-                Комната: <strong>{code}</strong>
-              </div>
-
-              {error && <div className="room-error">{error}</div>}
-
-              {!connected && (
-                <div className="room-connecting">
-                  <div className="room-spinner" />
-                  <span>Подключение...</span>
+  /* ── JOIN SCREEN ── */
+  if (status === 'connecting' || status === 'joining') {
+    return (
+      <>
+        <StudioBackground />
+        <div className="game-page" id="room-page">
+          <PageHeader />
+          <div className="game-content">
+            <div className="game-main">
+              <div className="room-join-area">
+                <div className="room-code-hero">
+                  <span className="room-code-label">Код комнаты</span>
+                  <span className="room-code-value">{code}</span>
                 </div>
-              )}
 
-              {connected && (
-                <>
-                  <p className="room-join-hint">Введите имя для участия</p>
-                  <div className="room-name-form">
+                {error && <div className="room-error">{error}</div>}
+
+                {!connected ? (
+                  <div className="room-connecting">
+                    <div className="room-spinner" />
+                    <span>Подключение к серверу...</span>
+                  </div>
+                ) : (
+                  <div className="room-join-form">
+                    <p className="room-join-hint">Введите имя для участия в игре</p>
                     <input
                       className="form-input room-name-input"
                       placeholder="Ваше имя"
@@ -258,53 +279,65 @@ export default function RoomPage() {
                       Войти в игру
                     </button>
                   </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── WAITING SCREEN ── */}
-      {status === 'waiting' && (
-        <div className="game-page" id="room-page">
-          <div className="room-center-screen">
-            <div className="room-logo-wrap">
-              <div className="logo-badge logo-badge--xl"><span>M</span></div>
-              <h1 className="room-brand">МИЛЛИОНЕР</h1>
-            </div>
-            <div className="room-join-card">
-              <h2 className="room-room-name">{roomName}</h2>
-              <p className="room-join-hint">Добро пожаловать, <strong className="room-player-name-hi">{playerName}</strong>!</p>
-              <div className="room-waiting-badge">
-                <div className="room-pulse-dot" />
-                Ожидание начала игры...
+                )}
               </div>
             </div>
+            <StaticPrizeSidebar />
           </div>
         </div>
-      )}
+      </>
+    );
+  }
 
-      {/* ── GAME SCREEN ── */}
-      {status === 'playing' && question && (
+  /* ── WAITING SCREEN ── */
+  if (status === 'waiting') {
+    return (
+      <>
+        <StudioBackground />
         <div className="game-page" id="room-page">
-          {/* Header */}
-          <header className="game-header">
-            <div className="header-logo">
-              <div className="logo-badge"><span>M</span></div>
-              <span className="logo-text">МИЛЛИОНЕР</span>
+          <PageHeader />
+          <div className="game-content">
+            <div className="game-main">
+              <div className="room-join-area">
+                <div className="room-code-hero">
+                  <span className="room-code-label">Добро пожаловать</span>
+                  <span className="room-code-value room-player-name-display">{playerName}</span>
+                </div>
+                <div className="room-room-title">{roomName}</div>
+                <div className="room-waiting-badge">
+                  <div className="room-pulse-dot" />
+                  Ожидание начала игры...
+                </div>
+                <p className="room-join-hint" style={{ marginTop: 8, fontSize: '0.85rem', opacity: 0.6 }}>
+                  Ведущий начнёт игру с пульта управления
+                </p>
+              </div>
             </div>
+            <StaticPrizeSidebar />
+          </div>
+        </div>
+      </>
+    );
+  }
 
-            {/* Lifeline status badges */}
-            <div className="room-lifelines-header">
-              <div className={`room-ll-badge room-ll-badge--5050 ${!lifelines.fiftyFifty ? 'room-ll-badge--used' : ''}`}>50/50</div>
-              <div className={`room-ll-badge room-ll-badge--phone ${!lifelines.phoneAFriend ? 'room-ll-badge--used' : ''}`}>Звонок</div>
-              <div className={`room-ll-badge room-ll-badge--audience ${!lifelines.askAudience ? 'room-ll-badge--used' : ''}`}>Зал</div>
-            </div>
-
-            {/* Timer + player name */}
+  /* ── PLAYING SCREEN ── */
+  if (status === 'playing' && question) {
+    return (
+      <>
+        <StudioBackground />
+        <div className="game-page" id="room-page">
+          {/* Header with lifelines + timer */}
+          <PageHeader right={
             <div className="room-header-right">
+              {/* Lifelines */}
+              <div className="room-lifelines-header">
+                <div className={`room-ll-badge room-ll-badge--5050 ${!lifelines.fiftyFifty ? 'room-ll-badge--used' : ''}`}>50/50</div>
+                <div className={`room-ll-badge room-ll-badge--phone ${!lifelines.phoneAFriend ? 'room-ll-badge--used' : ''}`}>Звонок</div>
+                <div className={`room-ll-badge room-ll-badge--audience ${!lifelines.askAudience ? 'room-ll-badge--used' : ''}`}>Зал</div>
+              </div>
+              {/* Player name */}
               <div className="room-player-tag">{playerName}</div>
+              {/* Timer */}
               <div className={`room-timer-wrap ${timerValue <= 5 ? 'room-timer--danger' : ''} ${timerPaused ? 'room-timer--paused' : ''}`}>
                 <svg className="room-timer-svg" viewBox="0 0 60 60">
                   <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
@@ -312,22 +345,20 @@ export default function RoomPage() {
                     <circle
                       cx="30" cy="30" r="26"
                       fill="none"
-                      stroke={timerValue <= 5 ? '#ff4444' : '#00d4ff'}
+                      stroke={timerValue <= 5 ? '#ff4444' : timerPaused ? '#ffd700' : '#00d4ff'}
                       strokeWidth="4"
                       strokeLinecap="round"
                       strokeDasharray={`${2 * Math.PI * 26}`}
                       strokeDashoffset={`${2 * Math.PI * 26 * (1 - timerPercent / 100)}`}
-                      style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s' }}
+                      style={{ transition: timerPaused ? 'none' : 'stroke-dashoffset 0.8s ease, stroke 0.3s' }}
                     />
                   </g>
                 </svg>
                 <span className="room-timer-text">{timerValue}</span>
-                {timerPaused && <span className="room-timer-pause-icon">⏸</span>}
               </div>
             </div>
-          </header>
+          } />
 
-          {/* Main content */}
           <div className="game-content">
             <div className="game-main">
               {/* Lifeline result popups */}
@@ -353,7 +384,7 @@ export default function RoomPage() {
                 </div>
               )}
 
-              {/* Question card — reuse game styles */}
+              {/* Question */}
               <div className="question-card" id="question-card">
                 <div className="question-diamond question-diamond--tl" />
                 <div className="question-diamond question-diamond--tr" />
@@ -362,20 +393,11 @@ export default function RoomPage() {
                 <h2 className="question-text">{question.text}</h2>
               </div>
 
-              {/* Answer grid — reuse game styles */}
+              {/* Answers */}
               <div className="answer-grid" id="answer-grid">
                 {question.answers.map((ans, i) => {
-                  const stateClass = getAnswerClass(i);
-                  // Map room classes to game answer-btn states
-                  const btnClass =
-                    stateClass === 'room-answer--correct' ? 'answer-btn--correct' :
-                    stateClass === 'room-answer--wrong' ? 'answer-btn--wrong' :
-                    stateClass === 'room-answer--dimmed' ? 'answer-btn--dimmed' :
-                    stateClass === 'room-answer--selected' ? 'answer-btn--selected' :
-                    stateClass === 'room-answer--admin-selected' ? 'answer-btn--selected' :
-                    stateClass === 'room-answer--hidden' ? 'answer-btn--dimmed' :
-                    'answer-btn--default';
-
+                  const btnClass = getAnswerClass(i);
+                  const isCorrect = btnClass === 'answer-btn--correct';
                   return (
                     <button
                       key={i}
@@ -386,29 +408,27 @@ export default function RoomPage() {
                     >
                       <span className="answer-label">{ans.label}:</span>
                       <span className="answer-text">{ans.text}</span>
-                      {stateClass === 'room-answer--correct' && (
-                        <span className="answer-check" style={{ display: 'flex' }}>✓</span>
-                      )}
+                      {isCorrect && <span className="answer-check" style={{ display: 'flex' }}>✓</span>}
                     </button>
                   );
                 })}
               </div>
 
-              {/* Status messages */}
+              {/* Status */}
               {submitted && correctAnswer === null && (
                 <div className="room-status-msg room-status-msg--submitted">
-                  Ответ отправлен! Ожидание результата...
+                  Ответ отправлен. Ожидание результата...
                 </div>
               )}
-              {!submitted && !correctAnswer && (
+              {!submitted && correctAnswer === null && (
                 <div className="room-status-msg room-status-msg--hint">
-                  Выберите ответ
+                  {timerPaused ? 'Таймер на паузе' : 'Выберите ответ'}
                 </div>
               )}
               {correctAnswer !== null && (
                 <div className={`room-status-msg ${selectedAnswer === correctAnswer ? 'room-status-msg--correct' : 'room-status-msg--wrong'}`}>
                   {selectedAnswer === correctAnswer
-                    ? '🎉 Правильно!'
+                    ? 'Правильно!'
                     : selectedAnswer !== null
                       ? `Неправильно. Правильный ответ: ${letters[correctAnswer]}`
                       : `Правильный ответ: ${letters[correctAnswer]}`}
@@ -416,7 +436,7 @@ export default function RoomPage() {
               )}
             </div>
 
-            {/* Prize sidebar — reuse game styles */}
+            {/* Live prize ladder */}
             <aside className="prize-sidebar" id="prize-sidebar">
               <div className="prize-header">
                 <div className="prize-header-label">Уровень</div>
@@ -448,26 +468,34 @@ export default function RoomPage() {
             </aside>
           </div>
         </div>
-      )}
+      </>
+    );
+  }
 
-      {/* ── GAME OVER ── */}
-      {status === 'finished' && (
-        <div className="game-page" id="room-page">
-          <div className="room-center-screen">
-            <div className="room-logo-wrap">
-              <div className="logo-badge logo-badge--xl"><span>M</span></div>
-              <h1 className="room-brand">МИЛЛИОНЕР</h1>
-            </div>
-            <div className="room-join-card">
-              <h2 className="room-room-name">Игра завершена!</h2>
-              <p className="room-join-hint">{gameOverMessage || 'Спасибо за участие!'}</p>
-              <a href="/" className="footer-action-btn" style={{ display: 'inline-block', textDecoration: 'none', marginTop: '16px' }}>
+  /* ── FINISHED SCREEN ── */
+  return (
+    <>
+      <StudioBackground />
+      <div className="game-page" id="room-page">
+        <PageHeader />
+        <div className="game-content">
+          <div className="game-main">
+            <div className="room-join-area">
+              <div className="room-code-hero">
+                <span className="room-code-label">Игра завершена</span>
+                <span className="room-code-value" style={{ fontSize: '1.6rem' }}>
+                  {playerName || 'Участник'}
+                </span>
+              </div>
+              <div className="room-room-title">{gameOverMessage || 'Спасибо за участие!'}</div>
+              <a href="/" className="footer-action-btn" style={{ display: 'inline-block', textDecoration: 'none', marginTop: 8 }}>
                 На главную
               </a>
             </div>
           </div>
+          <StaticPrizeSidebar />
         </div>
-      )}
+      </div>
     </>
   );
 }
