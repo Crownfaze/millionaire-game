@@ -423,9 +423,27 @@
 .room-sidebar-area {
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 0;
   flex-shrink: 0;
+  align-self: stretch;
+}
+
+/* Make prize-sidebar fill full height inside the wrapper */
+.room-sidebar-area .prize-sidebar {
+  height: 100%;
+  align-self: stretch;
+}
+
+/* Make prize-bar-container fill full height */
+.room-sidebar-area .prize-bar-container {
+  flex: 1;
+  min-height: 0;
+}
+
+.room-sidebar-area .prize-bar-track {
+  position: absolute;
+  inset: 0;
 }
 
 /* ── Host photo ── */
@@ -433,15 +451,16 @@
   display: flex;
   align-items: flex-end;
   flex-shrink: 0;
-  width: 120px;
+  width: 160px;
+  overflow: hidden;
 }
 
 .room-host-img {
-  width: 120px;
+  width: 160px;
   height: auto;
   object-fit: contain;
-  object-position: bottom;
+  object-position: bottom center;
   display: block;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  filter: drop-shadow(0 0 16px rgba(0, 212, 255, 0.2));
+  max-height: 100%;
+  filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.15));
 }
