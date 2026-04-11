@@ -22,6 +22,7 @@ interface RoomGameState {
   showCorrectAnswer: boolean;
   selectedAnswer: number | null;
   status: 'waiting' | 'playing' | 'finished';
+  safeLevelIndexes: number[];
 }
 
 const roomTimers = new Map<string, RoomTimer>();
@@ -50,6 +51,7 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
           showCorrectAnswer: false,
           selectedAnswer: null,
           status: 'waiting',
+          safeLevelIndexes: [4, 8, 9],
         });
       } else {
         roomStates.get(roomCode)!.hostSocketId = socket.id;
@@ -110,8 +112,9 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       question: { text: string; answers: Array<{ label: string; text: string }>; correctIndex: number };
       level: number;
       timerDuration: number;
+      safeLevelIndexes?: number[];
     }) => {
-      const { roomCode, question, level, timerDuration } = data;
+      const { roomCode, question, level, timerDuration, safeLevelIndexes } = data;
       const state = roomStates.get(roomCode);
       if (!state) return;
 
@@ -121,6 +124,7 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
       state.selectedAnswer = null;
       state.hiddenAnswers = [];
       state.status = 'playing';
+      if (safeLevelIndexes) state.safeLevelIndexes = safeLevelIndexes;
 
       db.prepare("UPDATE rooms SET status = 'playing' WHERE code = ?").run(roomCode);
       db.prepare("UPDATE participants SET status = 'active' WHERE room_code = ?").run(roomCode);
@@ -132,6 +136,7 @@ export function setupSocketHandlers(io: Server, db: Database.Database) {
         question: { text: question.text, answers: question.answers },
         level,
         timerDuration,
+        safeLevelIndexes: state.safeLevelIndexes,
       });
 
       console.log(`Question sent to room ${roomCode}: ${question.text.substring(0, 30)}...`);

@@ -37,9 +37,8 @@ export default function RoomPage() {
 
   const [hiddenAnswers, setHiddenAnswers] = useState<number[]>([]);
   const [lifelines, setLifelines] = useState({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
-  const [phoneResult, setPhoneResult] = useState<string | null>(null);
-  const [audienceResult, setAudienceResult] = useState<number[] | null>(null);
   const [gameOverMessage, setGameOverMessage] = useState<string | null>(null);
+  const [safeLevelIndexes, setSafeLevelIndexes] = useState<number[]>([4, 8, 9]);
 
   /* ─── Socket listeners ─── */
   useEffect(() => {
@@ -75,6 +74,7 @@ export default function RoomPage() {
       question: { text: string; answers: AnswerOption[] };
       level: number;
       timerDuration: number;
+      safeLevelIndexes?: number[];
     }) => {
       setQuestion(data.question);
       setCurrentLevel(data.level);
@@ -85,10 +85,9 @@ export default function RoomPage() {
       setAdminSelectedAnswer(null);
       setSubmitted(false);
       setHiddenAnswers([]);
-      setPhoneResult(null);
-      setAudienceResult(null);
       setTimerPaused(false);
       setStatus('playing');
+      if (data.safeLevelIndexes) setSafeLevelIndexes(data.safeLevelIndexes);
     });
 
     socket.on('game:reveal', (data: { correctIndex: number }) => {
@@ -103,8 +102,6 @@ export default function RoomPage() {
     socket.on('game:lifeline', (data: {
       type: '5050' | 'phone' | 'audience';
       hiddenAnswers?: number[];
-      phoneResult?: string;
-      audienceResult?: number[];
     }) => {
       if (data.type === '5050' && data.hiddenAnswers) {
         setHiddenAnswers(data.hiddenAnswers);
@@ -112,19 +109,15 @@ export default function RoomPage() {
       }
       if (data.type === 'phone') {
         setLifelines(prev => ({ ...prev, phoneAFriend: false }));
-        if (data.phoneResult) setPhoneResult(data.phoneResult);
       }
       if (data.type === 'audience') {
         setLifelines(prev => ({ ...prev, askAudience: false }));
-        if (data.audienceResult) setAudienceResult(data.audienceResult);
       }
     });
 
     socket.on('game:resetLifelines', () => {
       setLifelines({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
       setHiddenAnswers([]);
-      setPhoneResult(null);
-      setAudienceResult(null);
     });
 
     socket.on('timer:sync', (data: { remaining: number; total: number }) => {
@@ -331,9 +324,9 @@ export default function RoomPage() {
             <div className="room-header-right">
               {/* Lifelines */}
               <div className="room-lifelines-header">
-                <div className={`room-ll-badge room-ll-badge--5050 ${!lifelines.fiftyFifty ? 'room-ll-badge--used' : ''}`}>50/50</div>
-                <div className={`room-ll-badge room-ll-badge--phone ${!lifelines.phoneAFriend ? 'room-ll-badge--used' : ''}`}>Звонок</div>
-                <div className={`room-ll-badge room-ll-badge--audience ${!lifelines.askAudience ? 'room-ll-badge--used' : ''}`}>Зал</div>
+                <div className={`room-ll-badge room-ll-badge--5050 ${lifelines.fiftyFifty ? 'room-ll-badge--glow-gold' : 'room-ll-badge--used'}`}>50/50</div>
+                <div className={`room-ll-badge room-ll-badge--phone ${lifelines.phoneAFriend ? 'room-ll-badge--glow-gray' : 'room-ll-badge--used'}`}>Звонок</div>
+                <div className={`room-ll-badge room-ll-badge--audience ${lifelines.askAudience ? 'room-ll-badge--glow-cyan' : 'room-ll-badge--used'}`}>Зал</div>
               </div>
               {/* Player name */}
               <div className="room-player-tag">{playerName}</div>
@@ -361,29 +354,6 @@ export default function RoomPage() {
 
           <div className="game-content">
             <div className="game-main">
-              {/* Lifeline result popups */}
-              {phoneResult && (
-                <div className="room-lifeline-popup room-lifeline-popup--phone">
-                  Звонок другу: {phoneResult}
-                </div>
-              )}
-              {audienceResult && (
-                <div className="room-lifeline-popup room-lifeline-popup--audience">
-                  <strong>Помощь зала:</strong>
-                  <div className="room-audience-bars">
-                    {audienceResult.map((pct, i) => (
-                      <div key={i} className="room-audience-bar">
-                        <span className="room-audience-label">{letters[i]}</span>
-                        <div className="room-audience-track">
-                          <div className={`room-audience-fill ${correctAnswer === i ? 'room-audience-fill--correct' : ''}`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="room-audience-pct">{pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Question */}
               <div className="question-card" id="question-card">
                 <div className="question-diamond question-diamond--tl" />
@@ -434,38 +404,50 @@ export default function RoomPage() {
                       : `Правильный ответ: ${letters[correctAnswer]}`}
                 </div>
               )}
+
+              {/* Telegram link */}
+              <a href="https://t.me/ogmalikek" target="_blank" rel="noopener noreferrer" className="room-telegram-link">
+                TELEGRAM — t.me/ogmalikek
+              </a>
             </div>
 
-            {/* Live prize ladder */}
-            <aside className="prize-sidebar" id="prize-sidebar">
-              <div className="prize-header">
-                <div className="prize-header-label">Уровень</div>
-                <div className="prize-header-amount">{prizeLevelLabel}</div>
-              </div>
-              <div className="prize-ladder">
-                <div className="prize-bar-container">
-                  <div className="prize-bar-track">
-                    <div className="prize-bar-fill" style={{ height: `${((currentLevel + 1) / PRIZE_LEVELS.length) * 100}%` }} />
+            {/* Live prize ladder + host photo */}
+            <div className="room-sidebar-area">
+              <aside className="prize-sidebar" id="prize-sidebar">
+                <div className="prize-header">
+                  <div className="prize-header-label">Уровень</div>
+                  <div className="prize-header-amount">{prizeLevelLabel}</div>
+                </div>
+                <div className="prize-ladder">
+                  <div className="prize-bar-container">
+                    <div className="prize-bar-track">
+                      <div className="prize-bar-fill" style={{ height: `${((currentLevel + 1) / PRIZE_LEVELS.length) * 100}%` }} />
+                    </div>
+                  </div>
+                  <div className="prize-levels">
+                    {[...PRIZE_LEVELS].reverse().map((level, revIndex) => {
+                      const index = PRIZE_LEVELS.length - 1 - revIndex;
+                      const isCurrent = index === currentLevel;
+                      const isPassed = index < currentLevel;
+                      const isSafe = safeLevelIndexes.includes(index);
+                      let className = 'prize-level';
+                      if (isCurrent) className += ' prize-level--current';
+                      else if (isPassed) className += ' prize-level--passed';
+                      if (isSafe && !isCurrent) className += ' prize-level--safe';
+                      return (
+                        <div key={level.amount} className={className}>
+                          <span className="prize-level-dot" />
+                          <span>{level.label}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <div className="prize-levels">
-                  {[...PRIZE_LEVELS].reverse().map((level, revIndex) => {
-                    const index = PRIZE_LEVELS.length - 1 - revIndex;
-                    const isCurrent = index === currentLevel;
-                    const isPassed = index < currentLevel;
-                    let className = 'prize-level';
-                    if (isCurrent) className += ' prize-level--current';
-                    else if (isPassed) className += ' prize-level--passed';
-                    return (
-                      <div key={level.amount} className={className}>
-                        <span className="prize-level-dot" />
-                        <span>{level.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+              </aside>
+              <div className="room-host-photo">
+                <img src="/host.png" alt="Ведущий" className="room-host-img" />
               </div>
-            </aside>
+            </div>
           </div>
         </div>
       </>

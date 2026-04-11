@@ -129,6 +129,7 @@ export default function AdminPage() {
   const [prizeLevels, setPrizeLevels] = useState<string[]>(DEFAULT_PRIZE_LEVELS);
   const [editingPrize, setEditingPrize] = useState(false);
   const [prizeDraft, setPrizeDraft] = useState<string[]>(DEFAULT_PRIZE_LEVELS);
+  const [safeLevelIndexes, setSafeLevelIndexes] = useState<number[]>([4, 8, 9]); // 1000₽, 50000₽, 100000₽
 
   // Lifelines
   const [lifeline5050, setLifeline5050] = useState(true);
@@ -505,8 +506,9 @@ export default function AdminPage() {
       },
       level,
       timerDuration: activeRoom.timerDuration || timerDuration,
+      safeLevelIndexes,
     });
-  }, [activeRoom, timerDuration]);
+  }, [activeRoom, timerDuration, safeLevelIndexes]);
 
   const startGame = useCallback(() => {
     if (gameQuestions.length === 0 || !activeRoom) return;
@@ -1226,24 +1228,36 @@ export default function AdminPage() {
                   )}
                 </div>
                 <div className="prize-editor">
-                  {(editingPrize ? prizeDraft : prizeLevels).map((lvl, idx) => (
-                    <div key={idx} className="prize-editor-row">
-                      <span className="prize-editor-num">{idx + 1}</span>
-                      {editingPrize ? (
-                        <input
-                          className="form-input form-input--sm prize-editor-input"
-                          value={prizeDraft[idx]}
-                          onChange={(e) => {
-                            const next = [...prizeDraft];
-                            next[idx] = e.target.value;
-                            setPrizeDraft(next);
-                          }}
-                        />
-                      ) : (
-                        <span className={`prize-editor-label ${idx === currentLevel ? 'prize-editor-label--current' : ''}`}>{lvl}</span>
-                      )}
-                    </div>
-                  ))}
+                  {(editingPrize ? prizeDraft : prizeLevels).map((lvl, idx) => {
+                    const isSafe = safeLevelIndexes.includes(idx);
+                    return (
+                      <div key={idx} className={`prize-editor-row ${isSafe ? 'prize-editor-row--safe' : ''}`}>
+                        <span className="prize-editor-num">{idx + 1}</span>
+                        {editingPrize ? (
+                          <input
+                            className="form-input form-input--sm prize-editor-input"
+                            value={prizeDraft[idx]}
+                            onChange={(e) => {
+                              const next = [...prizeDraft];
+                              next[idx] = e.target.value;
+                              setPrizeDraft(next);
+                            }}
+                          />
+                        ) : (
+                          <span className={`prize-editor-label ${idx === currentLevel ? 'prize-editor-label--current' : ''} ${isSafe ? 'prize-editor-label--safe' : ''}`}>{lvl}</span>
+                        )}
+                        <button
+                          className={`prize-safe-btn ${isSafe ? 'prize-safe-btn--active' : ''}`}
+                          title={isSafe ? 'Убрать несгораемую сумму' : 'Сделать несгораемой'}
+                          onClick={() => setSafeLevelIndexes(prev =>
+                            isSafe ? prev.filter(i => i !== idx) : [...prev, idx].sort((a, b) => a - b)
+                          )}
+                        >
+                          {isSafe ? '★' : '☆'}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
