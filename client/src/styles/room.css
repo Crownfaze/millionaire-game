@@ -429,21 +429,10 @@
   align-self: stretch;
 }
 
-/* Make prize-sidebar fill full height inside the wrapper */
+/* Narrow prize sidebar back to original width */
 .room-sidebar-area .prize-sidebar {
-  height: 100%;
+  width: 160px;
   align-self: stretch;
-}
-
-/* Make prize-bar-container fill full height */
-.room-sidebar-area .prize-bar-container {
-  flex: 1;
-  min-height: 0;
-}
-
-.room-sidebar-area .prize-bar-track {
-  position: absolute;
-  inset: 0;
 }
 
 /* ── Host photo ── */
@@ -451,16 +440,14 @@
   display: flex;
   align-items: flex-end;
   flex-shrink: 0;
-  width: 160px;
-  overflow: hidden;
+  width: 220px;
 }
 
 .room-host-img {
-  width: 160px;
+  width: 220px;
   height: auto;
   object-fit: contain;
   object-position: bottom center;
   display: block;
-  max-height: 100%;
   filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.15));
 }
