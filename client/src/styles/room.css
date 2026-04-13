@@ -441,17 +441,17 @@
   align-self: stretch;
 }
 
-/* ── Host photo: fixed 280px, full person visible, bottom-aligned ── */
+/* ── Host photo: 400px wide, full person visible, bottom-aligned ── */
 .room-host-photo {
   display: flex;
   align-items: flex-end;
   flex-shrink: 0;
   align-self: stretch;
-  width: 280px;
+  width: 400px;
 }
 
 .room-host-img {
-  width: 280px;
+  width: 400px;
   height: auto;
   max-width: none; /* override global img { max-width: 100% } */
   object-fit: contain;
