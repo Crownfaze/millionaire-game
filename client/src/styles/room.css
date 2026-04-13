@@ -438,16 +438,18 @@
 /* ── Host photo ── */
 .room-host-photo {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   flex-shrink: 0;
   width: 220px;
+  align-self: stretch;
+  overflow: hidden;
 }
 
 .room-host-img {
   width: 220px;
-  height: auto;
-  object-fit: contain;
-  object-position: bottom center;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
   display: block;
   filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.15));
 }
