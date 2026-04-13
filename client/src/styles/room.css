@@ -453,7 +453,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  object-position: center bottom;
+  object-position: right bottom;
   display: block;
   filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.15));
 }
