@@ -440,16 +440,14 @@
   display: flex;
   align-items: stretch;
   flex-shrink: 0;
-  width: 220px;
   align-self: stretch;
-  overflow: hidden;
 }
 
 .room-host-img {
-  width: 220px;
   height: 100%;
-  object-fit: cover;
-  object-position: top center;
+  width: auto;
+  object-fit: contain;
+  object-position: center bottom;
   display: block;
   filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.15));
 }
