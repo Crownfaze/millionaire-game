@@ -419,12 +419,14 @@
   100% { background-position: 200% center; }
 }
 
-/* ── Remove right padding on room page ── */
+/* ── Room page: fill full viewport, no max-width centering ── */
 #room-page {
+  max-width: 100%;
+  margin: 0;
   padding-right: 0;
 }
 
-/* ── Sidebar area (prize ladder only in flex) ── */
+/* ── Sidebar area: prize ladder + host photo side by side ── */
 .room-sidebar-area {
   display: flex;
   flex-direction: row;
@@ -439,23 +441,21 @@
   align-self: stretch;
 }
 
-/* ── Host photo: fixed to viewport right edge ── */
-/* z-index: 9 = below game-page (z-index: 10), so all UI is above the photo */
+/* ── Host photo: fixed 280px, full person visible, bottom-aligned ── */
 .room-host-photo {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  height: 100vh;
-  pointer-events: none;
-  z-index: 9;
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 280px;
 }
 
 .room-host-img {
-  height: 100%;
-  width: auto;
+  width: 280px;
+  height: auto;
   max-width: none; /* override global img { max-width: 100% } */
   object-fit: contain;
-  object-position: right bottom;
+  object-position: center bottom;
   display: block;
   filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.15));
 }
