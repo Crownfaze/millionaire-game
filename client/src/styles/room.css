@@ -432,26 +432,31 @@
   gap: 0;
   flex-shrink: 0;
   align-self: stretch;
+  position: relative; /* host photo positions relative to this */
 }
 
-/* Narrow prize sidebar back to original width */
+/* Prize sidebar — sits in front of host photo */
 .room-sidebar-area .prize-sidebar {
   width: 160px;
   align-self: stretch;
+  position: relative;
+  z-index: 2;
 }
 
-/* ── Host photo ── */
+/* ── Host photo: absolute, anchored to right edge ── */
 .room-host-photo {
-  display: flex;
-  align-items: stretch;
-  align-self: stretch;
-  flex: 1;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
   overflow: hidden;
 }
 
 .room-host-img {
-  width: 100%;
   height: 100%;
+  width: auto;
   object-fit: contain;
   object-position: right bottom;
   display: block;
