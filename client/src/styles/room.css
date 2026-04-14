@@ -424,6 +424,12 @@
   max-width: 100%;
   margin: 0;
   padding-right: 0;
+  padding-bottom: 0;
+}
+
+/* Remove game-content bottom padding so person touches screen bottom */
+#room-page .game-content {
+  padding-bottom: 0;
 }
 
 /* ── Sidebar area: prize ladder + host photo side by side ── */
