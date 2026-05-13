@@ -1,14 +1,18 @@
 import { io, Socket } from 'socket.io-client';
-import { API_BASE } from './api';
+
+// In production: connect directly to Amvera backend for real WebSocket support.
+// Vercel can only proxy HTTP, so going through it would force polling mode.
+// In dev: empty string = same origin, Vite proxies /socket.io → localhost:4000.
+const SOCKET_URL = import.meta.env.PROD
+  ? (import.meta.env.VITE_BACKEND_URL ?? 'https://millionaire-sonter.amvera.io')
+  : '';
 
 // Single socket instance for the app
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    // In dev, Vite proxies /socket.io to localhost:4000 (empty string = same origin)
-    // In production (Vercel), VITE_BACKEND_URL points to Railway backend
-    socket = io(API_BASE, {
+    socket = io(SOCKET_URL, {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,
