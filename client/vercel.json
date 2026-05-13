@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://millionaire-game-production.up.railway.app/api/:path*"
+      "destination": "https://millionaire-sonter.amvera.io/api/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://millionaire-game-production.up.railway.app/socket.io/:path*"
+      "destination": "https://millionaire-sonter.amvera.io/socket.io/:path*"
     },
     {
       "source": "/(.*)",
