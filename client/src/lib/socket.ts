@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client';
 // Vercel can only proxy HTTP, so going through it would force polling mode.
 // In dev: empty string = same origin, Vite proxies /socket.io → localhost:4000.
 const SOCKET_URL = import.meta.env.PROD
-  ? (import.meta.env.VITE_BACKEND_URL ?? 'https://millionaire-sonter.amvera.io')
+  ? (import.meta.env.VITE_BACKEND_URL ?? 'https://millionaire.sonter.amvera.io')
   : '';
 
 // Single socket instance for the app
