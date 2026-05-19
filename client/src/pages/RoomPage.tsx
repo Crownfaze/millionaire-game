@@ -37,6 +37,7 @@ export default function RoomPage() {
 
   const [hiddenAnswers, setHiddenAnswers] = useState<number[]>([]);
   const [lifelines, setLifelines] = useState({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
+  const [audienceResult, setAudienceResult] = useState<number[] | null>(null);
   const [gameOverMessage, setGameOverMessage] = useState<string | null>(null);
   const [safeLevelIndexes, setSafeLevelIndexes] = useState<number[]>([4, 8, 9]);
 
@@ -85,6 +86,7 @@ export default function RoomPage() {
       setAdminSelectedAnswer(null);
       setSubmitted(false);
       setHiddenAnswers([]);
+      setAudienceResult(null);
       setTimerPaused(false);
       setStatus('playing');
       if (data.safeLevelIndexes) setSafeLevelIndexes(data.safeLevelIndexes);
@@ -102,6 +104,8 @@ export default function RoomPage() {
     socket.on('game:lifeline', (data: {
       type: '5050' | 'phone' | 'audience';
       hiddenAnswers?: number[];
+      phoneResult?: string;
+      audienceResult?: number[];
     }) => {
       if (data.type === '5050' && data.hiddenAnswers) {
         setHiddenAnswers(data.hiddenAnswers);
@@ -112,12 +116,16 @@ export default function RoomPage() {
       }
       if (data.type === 'audience') {
         setLifelines(prev => ({ ...prev, askAudience: false }));
+        if (data.audienceResult) {
+          setAudienceResult(data.audienceResult);
+        }
       }
     });
 
     socket.on('game:resetLifelines', () => {
       setLifelines({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
       setHiddenAnswers([]);
+      setAudienceResult(null);
     });
 
     socket.on('timer:sync', (data: { remaining: number; total: number }) => {
@@ -383,6 +391,27 @@ export default function RoomPage() {
                   );
                 })}
               </div>
+
+              {/* Audience lifeline result */}
+              {audienceResult && (
+                <div className="room-lifeline-popup room-lifeline-popup--audience" id="audience-result">
+                  <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', letterSpacing: '1px', textTransform: 'uppercase' }}>🎭 Помощь зала</span>
+                  <div className="room-audience-bars">
+                    {audienceResult.map((pct, i) => (
+                      <div key={i} className="room-audience-bar">
+                        <span className="room-audience-label">{letters[i]}</span>
+                        <div className="room-audience-track">
+                          <div
+                            className={`room-audience-fill${correctAnswer === i ? ' room-audience-fill--correct' : ''}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="room-audience-pct">{pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Status */}
               {submitted && correctAnswer === null && (
