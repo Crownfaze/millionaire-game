@@ -15,9 +15,14 @@ export function getSocket(): Socket {
     socket = io(SOCKET_URL, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,   // never give up reconnecting
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,       // max 5s between retries
+      randomizationFactor: 0.3,
+      timeout: 10000,
+      // Prefer WebSocket, fall back to polling only if needed (e.g. restrictive proxies)
       transports: ['websocket', 'polling'],
+      upgrade: true,
     });
 
     socket.on('connect', () => {
@@ -26,6 +31,10 @@ export function getSocket(): Socket {
 
     socket.on('disconnect', (reason) => {
       console.log('🔌 Socket disconnected:', reason);
+      // If the server closed the connection intentionally, try to reconnect manually
+      if (reason === 'io server disconnect') {
+        socket?.connect();
+      }
     });
 
     socket.on('connect_error', (err) => {
@@ -34,4 +43,11 @@ export function getSocket(): Socket {
   }
 
   return socket;
+}
+
+export function resetSocket(): void {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
 }

@@ -26,6 +26,10 @@ const io = new Server(httpServer, {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
+  pingInterval: 20000,   // send ping every 20s — keeps proxy connections alive
+  pingTimeout: 10000,    // wait 10s for pong before disconnecting
+  maxHttpBufferSize: 1e6, // 1MB max payload
+  transports: ['websocket', 'polling'],
 });
 
 // Middleware

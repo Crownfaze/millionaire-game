@@ -118,6 +118,8 @@ export default function AdminPage() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerPaused, setTimerPaused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Keep active room in ref so socket handlers can access it without stale closures
+  const activeRoomRef = useRef<RoomData | null>(null);
 
   // Current game state
   const [currentLevel, setCurrentLevel] = useState(0);
@@ -190,9 +192,47 @@ export default function AdminPage() {
     fetchRooms();
   }, [fetchQuestions, fetchCategories, fetchRooms]);
 
-  /* ─── Socket listeners (timer sync from server) ─── */
+  /* ─── Socket listeners (timer sync from server + reconnect restore) ─── */
   useEffect(() => {
     const socket = getSocket();
+
+    // On reconnect: rejoin the active room so server restores state
+    socket.on('connect', () => {
+      const room = activeRoomRef.current;
+      if (room) {
+        socket.emit('admin:join', { roomCode: room.code, hostId: room.hostId });
+        showNotify('Переподключено — восстанавливаем комнату...', 'info');
+      }
+    });
+
+    // Server sends back full room state on admin:join
+    socket.on('admin:joined', (data: {
+      roomCode: string;
+      gameQueue?: QuestionDB[];
+      currentQuestionIdx?: number;
+      currentLevel?: number;
+      lifelines?: { fiftyFifty: boolean; phoneAFriend: boolean; askAudience: boolean };
+      lifelineResults?: { phoneResult: string | null; audienceResult: number[] | null; hiddenAnswers: number[] };
+      safeLevelIndexes?: number[];
+    }) => {
+      if (data.gameQueue && data.gameQueue.length > 0) {
+        setGameQuestions(data.gameQueue);
+        if (data.currentQuestionIdx !== undefined) setCurrentQuestionIdx(data.currentQuestionIdx);
+        if (data.currentLevel !== undefined) setCurrentLevel(data.currentLevel);
+        showNotify('Очередь вопросов восстановлена', 'success');
+      }
+      if (data.lifelines) {
+        setLifeline5050(data.lifelines.fiftyFifty);
+        setLifelinePhone(data.lifelines.phoneAFriend);
+        setLifelineAudience(data.lifelines.askAudience);
+      }
+      if (data.lifelineResults) {
+        if (data.lifelineResults.phoneResult) setPhoneResult(data.lifelineResults.phoneResult);
+        if (data.lifelineResults.audienceResult) setAudienceResult(data.lifelineResults.audienceResult);
+        if (data.lifelineResults.hiddenAnswers?.length) setHiddenAnswers(data.lifelineResults.hiddenAnswers);
+      }
+      if (data.safeLevelIndexes) setSafeLevelIndexes(data.safeLevelIndexes);
+    });
 
     socket.on('timer:sync', (data: { remaining: number; total: number }) => {
       setTimerValue(data.remaining);
@@ -220,6 +260,8 @@ export default function AdminPage() {
     });
 
     return () => {
+      socket.off('connect');
+      socket.off('admin:joined');
       socket.off('timer:sync');
       socket.off('timer:paused');
       socket.off('timer:resumed');
@@ -351,6 +393,17 @@ export default function AdminPage() {
       showNotify('Ошибка при создании комнаты', 'error');
     }
   }, [roomName, timerDuration, difficulty, roomCategoryFilter, categories, showNotify, fetchRooms]);
+
+  // Keep ref in sync with state
+  useEffect(() => { activeRoomRef.current = activeRoom; }, [activeRoom]);
+
+  // Sync queue to server whenever it changes (persists across page refreshes)
+  useEffect(() => {
+    const room = activeRoomRef.current;
+    if (!room || gameQuestions.length === 0) return;
+    const socket = getSocket();
+    socket.emit('game:setQueue', { roomCode: room.code, questions: gameQuestions, currentIdx: currentQuestionIdx });
+  }, [gameQuestions, currentQuestionIdx]);
 
   const closeRoom = useCallback(async (code: string) => {
     try {
@@ -489,7 +542,7 @@ export default function AdminPage() {
   }, []);
 
   /* ─── Game Control ─── */
-  const sendQuestionToPlayers = useCallback((q: QuestionDB, level: number) => {
+  const sendQuestionToPlayers = useCallback((q: QuestionDB, level: number, qIdx: number) => {
     if (!activeRoom) return;
     const socket = getSocket();
     socket.emit('game:question', {
@@ -505,6 +558,7 @@ export default function AdminPage() {
         correctIndex: q.correct_index,
       },
       level,
+      questionIdx: qIdx,
       timerDuration: activeRoom.timerDuration || timerDuration,
       safeLevelIndexes,
     });
@@ -512,8 +566,7 @@ export default function AdminPage() {
 
   const startGame = useCallback(() => {
     if (gameQuestions.length === 0 || !activeRoom) return;
-    // game:question on server auto-starts the timer — no need to call startTimer separately
-    sendQuestionToPlayers(gameQuestions[0], 0);
+    sendQuestionToPlayers(gameQuestions[0], 0, 0);
     const dur = activeRoom.timerDuration || timerDuration;
     setTimerValue(dur);
     setTimerRunning(true);
@@ -531,7 +584,6 @@ export default function AdminPage() {
       setPhoneResult(null);
       setAudienceResult(null);
 
-      // game:question server handler auto-starts timer — just reset admin display
       const dur = activeRoom?.timerDuration || timerDuration;
       setTimerValue(dur);
       setTimerRunning(true);
@@ -539,7 +591,7 @@ export default function AdminPage() {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
 
-      sendQuestionToPlayers(gameQuestions[nextIdx], nextLevel);
+      sendQuestionToPlayers(gameQuestions[nextIdx], nextLevel, nextIdx);
       showNotify(`Вопрос ${nextIdx + 1} / ${gameQuestions.length}`, 'info');
     } else {
       showNotify('Все вопросы пройдены!', 'success');

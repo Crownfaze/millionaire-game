@@ -38,8 +38,11 @@ export default function RoomPage() {
   const [hiddenAnswers, setHiddenAnswers] = useState<number[]>([]);
   const [lifelines, setLifelines] = useState({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
   const [audienceResult, setAudienceResult] = useState<number[] | null>(null);
+  const [phoneResult, setPhoneResult] = useState<string | null>(null);
   const [gameOverMessage, setGameOverMessage] = useState<string | null>(null);
   const [safeLevelIndexes, setSafeLevelIndexes] = useState<number[]>([4, 8, 9]);
+  // Store player name in a ref so auto-rejoin can access it without stale closures
+  const playerNameRef = useRef('');
 
   /* ─── Socket listeners ─── */
   useEffect(() => {
@@ -48,7 +51,12 @@ export default function RoomPage() {
     socket.on('connect', () => {
       setConnected(true);
       setError(null);
-      if (status === 'connecting') setStatus('joining');
+      // Auto-rejoin: if player was already in a room and socket reconnected
+      if (playerNameRef.current && code) {
+        socket.emit('room:join', { roomCode: code, playerName: playerNameRef.current });
+      } else if (status === 'connecting') {
+        setStatus('joining');
+      }
     });
 
     socket.on('disconnect', () => setConnected(false));
@@ -61,6 +69,14 @@ export default function RoomPage() {
       roomName: string;
       status: string;
       timerState?: { remaining: number; total: number; isPaused: boolean } | null;
+      gameState?: {
+        currentQuestion?: { text: string; answers: AnswerOption[] } | null;
+        currentLevel?: number;
+        lifelines?: { fiftyFifty: boolean; phoneAFriend: boolean; askAudience: boolean };
+        lifelineResults?: { phoneResult: string | null; audienceResult: number[] | null; hiddenAnswers: number[] };
+        hiddenAnswers?: number[];
+        status?: string;
+      } | null;
     }) => {
       setRoomName(data.roomName || data.roomCode);
       setStatus(data.status === 'playing' ? 'playing' : 'waiting');
@@ -68,6 +84,20 @@ export default function RoomPage() {
         setTimerValue(data.timerState.remaining);
         setTimerTotal(data.timerState.total);
         setTimerPaused(data.timerState.isPaused);
+      }
+      // Restore game state on reconnect
+      if (data.gameState) {
+        const gs = data.gameState;
+        if (gs.currentQuestion) setQuestion(gs.currentQuestion);
+        if (gs.currentLevel !== undefined) setCurrentLevel(gs.currentLevel);
+        if (gs.lifelines) setLifelines(gs.lifelines);
+        if (gs.hiddenAnswers) setHiddenAnswers(gs.hiddenAnswers);
+        if (gs.lifelineResults) {
+          if (gs.lifelineResults.phoneResult) setPhoneResult(gs.lifelineResults.phoneResult);
+          if (gs.lifelineResults.audienceResult) setAudienceResult(gs.lifelineResults.audienceResult);
+          if (gs.lifelineResults.hiddenAnswers?.length) setHiddenAnswers(gs.lifelineResults.hiddenAnswers);
+        }
+        if (gs.status === 'playing') setStatus('playing');
       }
     });
 
@@ -87,6 +117,7 @@ export default function RoomPage() {
       setSubmitted(false);
       setHiddenAnswers([]);
       setAudienceResult(null);
+      setPhoneResult(null);
       setTimerPaused(false);
       setStatus('playing');
       if (data.safeLevelIndexes) setSafeLevelIndexes(data.safeLevelIndexes);
@@ -113,12 +144,11 @@ export default function RoomPage() {
       }
       if (data.type === 'phone') {
         setLifelines(prev => ({ ...prev, phoneAFriend: false }));
+        if (data.phoneResult) setPhoneResult(data.phoneResult);
       }
       if (data.type === 'audience') {
         setLifelines(prev => ({ ...prev, askAudience: false }));
-        if (data.audienceResult) {
-          setAudienceResult(data.audienceResult);
-        }
+        if (data.audienceResult) setAudienceResult(data.audienceResult);
       }
     });
 
@@ -126,6 +156,7 @@ export default function RoomPage() {
       setLifelines({ fiftyFifty: true, phoneAFriend: true, askAudience: true });
       setHiddenAnswers([]);
       setAudienceResult(null);
+      setPhoneResult(null);
     });
 
     socket.on('timer:sync', (data: { remaining: number; total: number }) => {
@@ -163,6 +194,7 @@ export default function RoomPage() {
     if (!nameInput.trim() || !code) return;
     const name = nameInput.trim();
     setPlayerName(name);
+    playerNameRef.current = name;  // store for auto-rejoin
     socketRef.current.emit('room:join', { roomCode: code, playerName: name });
   }, [nameInput, code]);
 
@@ -391,6 +423,14 @@ export default function RoomPage() {
                   );
                 })}
               </div>
+
+              {/* Phone lifeline result */}
+              {phoneResult && (
+                <div className="room-lifeline-popup room-lifeline-popup--phone" id="phone-result">
+                  <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', letterSpacing: '1px', textTransform: 'uppercase' }}>📞 Звонок другу</span>
+                  <span style={{ marginTop: 4, lineHeight: 1.5 }}>{phoneResult}</span>
+                </div>
+              )}
 
               {/* Audience lifeline result */}
               {audienceResult && (
